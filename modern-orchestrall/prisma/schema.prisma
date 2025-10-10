@@ -1,0 +1,313 @@
+// This file contains the Prisma schema for the modern Orchestrall platform
+// Run `npx prisma generate` after making changes
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  tier        String   @default("starter") // starter, professional, enterprise
+  status      String   @default("active") // active, suspended, cancelled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  users       User[]
+  teams       Team[]
+  featureFlags FeatureFlag[]
+  apiKeys     ApiKey[]
+  plugins     OrganizationPlugin[]
+  workflows   Workflow[]
+  agents      Agent[]
+  auditLogs   AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String?
+  avatar         String?
+  password       String?  // Optional for SSO users
+  status         String   @default("active")
+  lastLoginAt    DateTime?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relations
+  teams          TeamMembership[]
+  apiKeys        ApiKey[]
+  authProviders  UserAuthProvider[]
+  auditLogs      AuditLog[]
+  createdWorkflows Workflow[]
+  createdAgents  Agent[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Team {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Relations
+  members        TeamMembership[]
+  workflows      Workflow[]
+  agents         Agent[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("teams")
+}
+
+model TeamMembership {
+  id       String @id @default(cuid())
+  userId   String
+  teamId   String
+  role     String @default("member") // member, admin, owner
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@map("team_memberships")
+}
+
+model FeatureFlag {
+  id             String   @id @default(cuid())
+  name           String
+  key            String   @unique // e.g., "crm-integration", "agent-runtime"
+  description    String?
+  enabled        Boolean  @default(false)
+  percentage     Int      @default(100) // Rollout percentage (0-100)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Flag-specific configuration
+  config         Json     @default("{}")
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model ApiKey {
+  id             String   @id @default(cuid())
+  name           String
+  key            String   @unique
+  permissions    String[] // Array of permission strings
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Usage tracking
+  lastUsedAt     DateTime?
+  usageCount     Int      @default(0)
+  rateLimit      Int      @default(1000) // Requests per hour
+
+  expiresAt      DateTime?
+  revoked        Boolean  @default(false)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("api_keys")
+}
+
+model UserAuthProvider {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider    String   // google, github, microsoft, etc.
+  providerId  String   // ID from the provider
+  profile     Json     @default("{}") // Provider profile data
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([provider, providerId])
+  @@map("user_auth_providers")
+}
+
+model OrganizationPlugin {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pluginId       String   // Reference to plugin registry
+  name           String
+  version        String
+  config         Json     @default("{}")
+  enabled        Boolean  @default(true)
+  status         String   @default("installed") // installed, running, error
+
+  installedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("organization_plugins")
+}
+
+model Workflow {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  definition     Json     // Workflow definition (LangGraph, BPMN, etc.)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teamId         String?
+  team           Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Execution tracking
+  executions     WorkflowExecution[]
+
+  status         String   @default("draft") // draft, active, inactive
+  tags           String[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  // Execution context
+  input      Json     @default("{}")
+  output     Json     @default("{}")
+  status     String   @default("running") // running, completed, failed, cancelled
+  error      String?
+
+  // Timing
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  // Metadata
+  triggeredBy String? // user ID or system
+  metadata   Json     @default("{}")
+
+  @@map("workflow_executions")
+}
+
+model Agent {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  type           String   // autonomous, assistant, specialist, coordinator
+  framework      String   // openai, langgraph, crewai, autogen, custom
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  teamId         String?
+  team           Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Agent configuration
+  config         Json     @default("{}")
+  capabilities   String[] // List of capabilities/tools
+  memory         Json     @default("{}") // Memory configuration
+
+  // Runtime state
+  status         String   @default("inactive") // inactive, active, error
+  lastActiveAt   DateTime?
+
+  // Relations
+  conversations  AgentConversation[]
+  executions     AgentExecution[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("agents")
+}
+
+model AgentConversation {
+  id          String   @id @default(cuid())
+  agentId     String
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Conversation context
+  conversationId String
+  userId        String?
+  organizationId String
+
+  // Messages
+  messages    Json     @default("[]") // Array of message objects
+
+  // Metadata
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  metadata    Json     @default("{}")
+
+  @@map("agent_conversations")
+}
+
+model AgentExecution {
+  id         String   @id @default(cuid())
+  agentId    String
+  agent      Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  // Execution context
+  input      Json     @default("{}")
+  output     Json     @default("{}")
+  status     String   @default("running") // running, completed, failed
+  error      String?
+
+  // Timing and performance
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+  duration   Int?     // Execution time in milliseconds
+
+  // Metadata
+  triggeredBy String? // user ID or system
+  metadata   Json     @default("{}")
+
+  @@map("agent_executions")
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Audit details
+  action         String   // create, update, delete, login, etc.
+  resource       String   // users, organizations, workflows, etc.
+  resourceId     String?  // ID of the affected resource
+  details        Json     @default("{}") // Additional context
+
+  // Tracking
+  ipAddress      String?
+  userAgent      String?
+  sessionId      String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([action, resource])
+  @@map("audit_logs")
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@orchestrall/auth-service",
+  "version": "1.0.0",
+  "description": "Authentication and authorization service for Orchestrall",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@fastify/jwt": "^7.0.0",
+    "@orchestrall/shared": "workspace:*",
+    "fastify": "^4.0.0",
+    "bcryptjs": "^2.4.3",
+    "prisma": "^5.0.0",
+    "@prisma/client": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

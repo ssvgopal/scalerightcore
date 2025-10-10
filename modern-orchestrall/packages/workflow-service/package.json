@@ -1,0 +1,27 @@
+{
+  "name": "@orchestrall/workflow-service",
+  "version": "1.0.0",
+  "description": "Workflow orchestration service with LangGraph integration",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@orchestrall/shared": "workspace:*",
+    "fastify": "^4.0.0",
+    "prisma": "^5.0.0",
+    "@prisma/client": "^5.0.0",
+    "langgraph": "^0.1.0",
+    "temporalio": "^1.0.0",
+    "redis": "^4.0.0",
+    "ioredis": "^5.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

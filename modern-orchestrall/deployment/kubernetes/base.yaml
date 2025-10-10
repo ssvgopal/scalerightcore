@@ -1,0 +1,367 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestrall
+  labels:
+    name: orchestrall
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orchestrall-config
+  namespace: orchestrall
+data:
+  NODE_ENV: "production"
+  DEPLOYMENT_TYPE: "cloud-native"
+  LOG_LEVEL: "info"
+  FEATURE_FLAGS_PROVIDER: "unleash"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orchestrall-secrets
+  namespace: orchestrall
+type: Opaque
+data:
+  # Base64 encoded values
+  DATABASE_URL: cG9zdGdyZXM6Ly9vcmNoZXN0cmFsbDpvcmNoZXN0cmFsbEBvcmNoZXN0cmFsbC1kYjovb3JjaGVzdHJhbGw=
+  REDIS_URL: cmVkaXM6Ly9vcmNoZXN0cmFsbC1yZWRpczo2Mzc5
+  JWT_SECRET: T1JDSEVTUlJBTEwtSk9XTl9TRUNSRVQ=
+  OPENAI_API_KEY: WU9VUl9PUEVOQUlfQVBJX0tFWQ==
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrall-db
+  namespace: orchestrall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrall-db
+  template:
+    metadata:
+      labels:
+        app: orchestrall-db
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: orchestrall
+        - name: POSTGRES_USER
+          value: orchestrall
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: DATABASE_URL
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrall-db
+  namespace: orchestrall
+spec:
+  selector:
+    app: orchestrall-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+
+---
+# PostgreSQL PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: orchestrall
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrall-redis
+  namespace: orchestrall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestrall-redis
+  template:
+    metadata:
+      labels:
+        app: orchestrall-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrall-redis
+  namespace: orchestrall
+spec:
+  selector:
+    app: orchestrall-redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+
+---
+# API Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrall-api-gateway
+  namespace: orchestrall
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orchestrall-api-gateway
+  template:
+    metadata:
+      labels:
+        app: orchestrall-api-gateway
+    spec:
+      containers:
+      - name: api-gateway
+        image: orchestrall/api-gateway:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          valueFrom:
+            configMapKeyRef:
+              name: orchestrall-config
+              key: NODE_ENV
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: REDIS_URL
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: JWT_SECRET
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+
+---
+# API Gateway Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrall-api-gateway
+  namespace: orchestrall
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+spec:
+  selector:
+    app: orchestrall-api-gateway
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  type: LoadBalancer
+
+---
+# Agent Runtime Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrall-agent-runtime
+  namespace: orchestrall
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orchestrall-agent-runtime
+  template:
+    metadata:
+      labels:
+        app: orchestrall-agent-runtime
+    spec:
+      containers:
+      - name: agent-runtime
+        image: orchestrall/agent-runtime:latest
+        ports:
+        - containerPort: 3001
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: REDIS_URL
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: orchestrall-secrets
+              key: OPENAI_API_KEY
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "300m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+
+---
+# Agent Runtime Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrall-agent-runtime
+  namespace: orchestrall
+spec:
+  selector:
+    app: orchestrall-agent-runtime
+  ports:
+  - port: 3001
+    targetPort: 3001
+  type: ClusterIP
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: orchestrall-api-gateway-hpa
+  namespace: orchestrall
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: orchestrall-api-gateway
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+# Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orchestrall-network-policy
+  namespace: orchestrall
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestrall-api-gateway
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+    - protocol: TCP
+      port: 6379  # Redis
