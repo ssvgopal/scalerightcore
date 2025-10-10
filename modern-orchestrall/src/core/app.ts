@@ -7,10 +7,7 @@ import { z } from 'zod';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error-handler';
-import { authPlugin } from './plugins/auth';
-import { featureFlagPlugin } from './plugins/feature-flags';
-import { agentRuntimePlugin } from './plugins/agent-runtime';
-import { apiGatewayPlugin } from './plugins/api-gateway';
+import { externalAPIsPlugin } from './plugins/external-apis';
 
 const server = Fastify({
   logger: logger,
@@ -59,6 +56,16 @@ await server.register(authPlugin);
 await server.register(featureFlagPlugin);
 await server.register(agentRuntimePlugin);
 await server.register(apiGatewayPlugin);
+
+// Register external APIs plugin
+await server.register(externalAPIsPlugin, {
+  config: {
+    enableRateLimiting: true,
+    corsOrigins: config.cors.origin,
+    apiKeyRequired: true,
+    maxRequestSize: '10mb',
+  },
+});
 
 // Health check endpoint
 server.get('/health', {
