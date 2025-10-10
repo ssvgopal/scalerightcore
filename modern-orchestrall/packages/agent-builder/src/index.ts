@@ -172,8 +172,9 @@ const AGENT_TEMPLATES: AgentTemplate[] = [
   },
 ];
 
-// In-memory storage (in production, use database)
-const customAgents: Map<string, CustomAgent> = new Map();
+// Initialize Prisma for database storage
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
 
 // Routes
 fastify.get('/templates', {
@@ -250,22 +251,19 @@ fastify.post('/agents', {
   // Validate configuration against schema
   await validateConfiguration(configuration, template.configSchema);
 
-  // Create custom agent
-  const agent: CustomAgent = {
-    id: `agent_${Date.now()}`,
-    name,
-    description,
-    organizationId: request.user.organizationId,
-    createdBy: request.user.id,
-    templateId,
-    configuration,
-    capabilities: template.capabilities,
-    status: 'draft',
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  customAgents.set(agent.id, agent);
+  // Create custom agent in database
+  const agent = await prisma.agent.create({
+    data: {
+      name,
+      description,
+      organizationId: request.user.organizationId,
+      createdById: request.user.id,
+      type: templateId,
+      config: configuration,
+      capabilities: template.capabilities,
+      status: 'draft',
+    },
+  });
 
   const response: ApiResponse<CustomAgent> = {
     success: true,
@@ -293,11 +291,20 @@ fastify.get('/agents', {
   },
   preHandler: [fastify.authenticate],
 }, async (request, reply) => {
-  const agents = Array.from(customAgents.values()).filter(
-    agent => agent.organizationId === request.user.organizationId
-  );
+  // Query agents from database
+  const agents = await prisma.agent.findMany({
+    where: {
+      organizationId: request.user.organizationId,
+    },
+    include: {
+      createdBy: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
 
-  const response: ApiResponse<CustomAgent[]> = {
+  const response: ApiResponse<typeof agents> = {
     success: true,
     data: agents,
   };
@@ -321,17 +328,22 @@ fastify.get('/agents/:agentId', {
 }, async (request, reply) => {
   const { agentId } = request.params;
 
-  const agent = customAgents.get(agentId);
+  // Query agent from database
+  const agent = await prisma.agent.findFirst({
+    where: {
+      id: agentId,
+      organizationId: request.user.organizationId,
+    },
+    include: {
+      createdBy: true,
+    },
+  });
+  
   if (!agent) {
     throw new NotFoundError('Agent');
   }
 
-  // Check ownership
-  if (agent.organizationId !== request.user.organizationId) {
-    throw new ValidationError('Access denied');
-  }
-
-  const response: ApiResponse<CustomAgent> = {
+  const response: ApiResponse<typeof agent> = {
     success: true,
     data: agent,
   };
@@ -362,32 +374,37 @@ fastify.put('/agents/:agentId', {
   const { agentId } = request.params;
   const updates = request.body;
 
-  const agent = customAgents.get(agentId);
+  // Check agent exists and user has access
+  const agent = await prisma.agent.findFirst({
+    where: {
+      id: agentId,
+      organizationId: request.user.organizationId,
+    },
+  });
+  
   if (!agent) {
     throw new NotFoundError('Agent');
   }
 
-  // Check ownership
-  if (agent.organizationId !== request.user.organizationId) {
-    throw new ValidationError('Access denied');
-  }
-
   // Validate configuration if provided
   if (updates.configuration) {
-    const template = AGENT_TEMPLATES.find(t => t.id === agent.templateId);
+    const template = AGENT_TEMPLATES.find(t => t.id === agent.type);
     if (template) {
       await validateConfiguration(updates.configuration, template.configSchema);
     }
   }
 
-  // Update agent
-  const updatedAgent = {
-    ...agent,
-    ...updates,
-    updatedAt: new Date(),
-  };
-
-  customAgents.set(agentId, updatedAgent);
+  // Update agent in database
+  const updatedAgent = await prisma.agent.update({
+    where: { id: agentId },
+    data: {
+      name: updates.name,
+      description: updates.description,
+      config: updates.configuration,
+      status: updates.status,
+      updatedAt: new Date(),
+    },
+  });
 
   const response: ApiResponse<CustomAgent> = {
     success: true,
@@ -414,17 +431,22 @@ fastify.delete('/agents/:agentId', {
 }, async (request, reply) => {
   const { agentId } = request.params;
 
-  const agent = customAgents.get(agentId);
+  // Check agent exists and user has access
+  const agent = await prisma.agent.findFirst({
+    where: {
+      id: agentId,
+      organizationId: request.user.organizationId,
+    },
+  });
+  
   if (!agent) {
     throw new NotFoundError('Agent');
   }
 
-  // Check ownership
-  if (agent.organizationId !== request.user.organizationId) {
-    throw new ValidationError('Access denied');
-  }
-
-  customAgents.delete(agentId);
+  // Delete agent from database
+  await prisma.agent.delete({
+    where: { id: agentId },
+  });
 
   const response: ApiResponse<{ message: string }> = {
     success: true,
@@ -456,17 +478,24 @@ fastify.post('/agents/:agentId/deploy', {
 }, async (request, reply) => {
   const { agentId } = request.params;
 
-  const agent = customAgents.get(agentId);
+  // Check agent exists and user has access
+  const agent = await prisma.agent.findFirst({
+    where: {
+      id: agentId,
+      organizationId: request.user.organizationId,
+    },
+  });
+  
   if (!agent) {
     throw new NotFoundError('Agent');
   }
 
-  // Check ownership
-  if (agent.organizationId !== request.user.organizationId) {
-    throw new ValidationError('Access denied');
-  }
-
-  // Deploy agent (mock implementation)
+  // Update agent status to deployed
+  await prisma.agent.update({
+    where: { id: agentId },
+    data: { status: 'active' },
+  });
+  
   const deploymentId = `deploy_${Date.now()}`;
 
   const response: ApiResponse<any> = {
@@ -484,12 +513,14 @@ fastify.post('/agents/:agentId/deploy', {
 
 // Health check
 fastify.get('/health', async (request, reply) => {
+  const agentsCount = await prisma.agent.count();
+  
   return {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     version: process.env.npm_package_version || '1.0.0',
-    agentsCount: customAgents.size,
+    agentsCount,
   };
 });
 

@@ -428,21 +428,60 @@ export const externalAPIsPlugin: FastifyPluginAsync<{ config: ExternalAPIConfig 
   }, async (request, reply) => {
     const { timeframe = '7d', metrics = ['agents', 'workflows', 'users'] } = request.query;
 
-    // Mock analytics data
+    // Query real analytics from database
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    
+    const timeframeMs = {
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+      '30d': 30 * 24 * 60 * 60 * 1000,
+      '90d': 90 * 24 * 60 * 60 * 1000,
+    };
+    
+    const startDate = new Date(Date.now() - timeframeMs[timeframe]);
+    
+    // Get actual metrics from database
+    const [agentCount, workflowCount, userCount, executionCount] = await Promise.all([
+      prisma.agent.count({ where: { createdAt: { gte: startDate } } }),
+      prisma.workflow.count({ where: { createdAt: { gte: startDate } } }),
+      prisma.user.count({ where: { createdAt: { gte: startDate } } }),
+      prisma.workflowExecution.count({ where: { createdAt: { gte: startDate } } }),
+    ]);
+    
+    // Calculate trends (compare with previous period)
+    const previousStartDate = new Date(startDate.getTime() - timeframeMs[timeframe]);
+    const [prevAgentCount, prevWorkflowCount, prevUserCount] = await Promise.all([
+      prisma.agent.count({ where: { createdAt: { gte: previousStartDate, lt: startDate } } }),
+      prisma.workflow.count({ where: { createdAt: { gte: previousStartDate, lt: startDate } } }),
+      prisma.user.count({ where: { createdAt: { gte: previousStartDate, lt: startDate } } }),
+    ]);
+    
+    const calculateTrend = (current: number, previous: number) => {
+      if (previous === 0) return { change: 0, trend: 'stable' as const };
+      const change = ((current - previous) / previous) * 100;
+      return {
+        change: Math.round(change * 10) / 10,
+        trend: change > 5 ? 'up' as const : change < -5 ? 'down' as const : 'stable' as const,
+      };
+    };
+    
     const analyticsData = {
       metrics: {
-        agents: 45,
-        workflows: 123,
-        users: 234,
-        executions: 5678,
+        agents: agentCount,
+        workflows: workflowCount,
+        users: userCount,
+        executions: executionCount,
       },
       trends: [
-        { metric: 'agents', change: 12.5, trend: 'up' },
-        { metric: 'workflows', change: -2.1, trend: 'down' },
-        { metric: 'users', change: 8.3, trend: 'up' },
+        { metric: 'agents', ...calculateTrend(agentCount, prevAgentCount) },
+        { metric: 'workflows', ...calculateTrend(workflowCount, prevWorkflowCount) },
+        { metric: 'users', ...calculateTrend(userCount, prevUserCount) },
       ],
-      summary: 'Platform usage increased by 8.2% compared to last week.',
+      summary: `Platform metrics for ${timeframe} period`,
     };
+    
+    await prisma.$disconnect();
 
     const response: ApiResponse<typeof analyticsData> = {
       success: true,
@@ -624,89 +663,126 @@ export const externalAPIsPlugin: FastifyPluginAsync<{ config: ExternalAPIConfig 
 // ===== HELPER FUNCTIONS =====
 
 async function executeCRMAgent(input: string, context?: any, options?: any): Promise<AgentResponse> {
-  // Route to CRM agent logic
-  const mockResponse: AgentResponse = {
-    content: `CRM Analysis: ${input}`,
-    metadata: {
-      agent: 'CRM',
-      duration: 150,
-      confidence: 0.9,
-    },
-    actions: [
-      {
-        type: 'update_customer_record',
-        payload: { customerId: '123', action: 'analyzed' },
-      },
-    ],
-    framework: 'openai',
+  // Import and instantiate CRM agent
+  const { CRMAgent } = await import('@orchestrall/agent-service/agents/CRMAgent');
+  
+  const crmConfig = {
+    apiKey: process.env.CRM_API_KEY || '',
+    instanceUrl: process.env.CRM_INSTANCE_URL || '',
+    apiVersion: process.env.CRM_API_VERSION || 'v1',
   };
-
-  return mockResponse;
+  
+  const agent = new CRMAgent(crmConfig);
+  const agentContext = {
+    organizationId: context?.organizationId || 'external',
+    userId: context?.userId || 'external-user',
+    conversationId: context?.conversationId,
+    metadata: context?.metadata || {},
+  };
+  
+  return await agent.process(input, agentContext);
 }
 
 async function executeAnalyticsAgent(input: string, context?: any, options?: any): Promise<AgentResponse> {
-  // Route to Analytics agent logic
-  const mockResponse: AgentResponse = {
-    content: `Analytics Results: ${input}`,
-    metadata: {
-      agent: 'Analytics',
-      duration: 200,
-      confidence: 0.85,
-    },
-    actions: [
-      {
-        type: 'generate_report',
-        payload: { reportType: 'analysis', data: input },
-      },
-    ],
-    framework: 'openai',
+  // Import and instantiate Analytics agent
+  const { AnalyticsAgent } = await import('@orchestrall/agent-service/agents/AnalyticsAgent');
+  
+  const analyticsConfig = {
+    dataSources: (process.env.ANALYTICS_DATA_SOURCES || 'database,api').split(','),
+    reportFormats: ['summary', 'detailed', 'visual'],
+    defaultMetrics: ['revenue', 'users', 'conversions'],
   };
-
-  return mockResponse;
+  
+  const agent = new AnalyticsAgent(analyticsConfig);
+  const agentContext = {
+    organizationId: context?.organizationId || 'external',
+    userId: context?.userId || 'external-user',
+    conversationId: context?.conversationId,
+    metadata: context?.metadata || {},
+  };
+  
+  return await agent.process(input, agentContext);
 }
 
 async function executeDocumentAgent(input: string, context?: any, options?: any): Promise<AgentResponse> {
-  // Route to Document Processing agent logic
-  const mockResponse: AgentResponse = {
-    content: `Document Analysis: ${input}`,
-    metadata: {
-      agent: 'DocumentProcessor',
-      duration: 300,
-      confidence: 0.8,
-    },
-    actions: [
-      {
-        type: 'extract_data',
-        payload: { documentId: '123', fields: ['name', 'date'] },
-      },
-    ],
-    framework: 'openai',
+  // Import and instantiate Document Processing agent
+  const { DocumentProcessingAgent } = await import('@orchestrall/agent-service/agents/DocumentProcessingAgent');
+  
+  const documentConfig = {
+    supportedTypes: ['pdf', 'docx', 'txt', 'html', 'md'],
+    maxFileSize: 10 * 1024 * 1024, // 10MB
+    ocrEnabled: process.env.OCR_ENABLED === 'true',
+    extractFields: ['name', 'date', 'amount', 'email', 'phone'],
   };
-
-  return mockResponse;
+  
+  const agent = new DocumentProcessingAgent(documentConfig);
+  const agentContext = {
+    organizationId: context?.organizationId || 'external',
+    userId: context?.userId || 'external-user',
+    conversationId: context?.conversationId,
+    metadata: context?.metadata || {},
+  };
+  
+  return await agent.process(input, agentContext);
 }
 
 async function executeGeneralAgent(input: string, context?: any, options?: any): Promise<AgentResponse> {
-  // General AI assistant logic
-  const mockResponse: AgentResponse = {
-    content: `AI Assistant Response: ${input}`,
+  // Use OpenAI for general AI assistant
+  const { OpenAI } = await import('openai');
+  
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+  
+  const startTime = Date.now();
+  
+  const response = await openai.chat.completions.create({
+    model: options?.model || 'gpt-4',
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a helpful AI assistant for the Orchestrall platform. Provide accurate, helpful responses.',
+      },
+      { role: 'user', content: input },
+    ],
+    temperature: options?.temperature || 0.7,
+    max_tokens: options?.maxTokens || 500,
+  });
+  
+  const duration = Date.now() - startTime;
+  
+  return {
+    content: response.choices[0].message.content || '',
     metadata: {
       agent: 'GeneralAI',
-      duration: 100,
+      duration,
       confidence: 0.7,
+      tokensUsed: response.usage?.total_tokens,
     },
     framework: 'openai',
   };
-
-  return mockResponse;
 }
 
 // MCP-specific helper functions
 async function executeAgentViaMCP(params: any): Promise<any> {
   const { agentType, input, context } = params;
 
-  // Execute agent and return MCP-compatible result
-  const result = await executeCRMAgent(input, context);
+  // Route to appropriate agent based on type
+  let result: AgentResponse;
+  
+  switch (agentType) {
+    case 'crm':
+      result = await executeCRMAgent(input, context);
+      break;
+    case 'analytics':
+      result = await executeAnalyticsAgent(input, context);
+      break;
+    case 'document':
+      result = await executeDocumentAgent(input, context);
+      break;
+    default:
+      result = await executeGeneralAgent(input, context);
+  }
 
   return {
     response: result.content,

@@ -380,24 +380,45 @@ class CRMAgent {
 
   private async queryCRM(query: string): Promise<CustomerData | null> {
     try {
-      // Mock CRM API call
-      // In production, this would call actual CRM system (Salesforce, HubSpot, etc.)
-
-      if (query.includes('user@example.com')) {
-        return {
-          id: 'cust_123',
-          name: 'John Doe',
-          email: 'user@example.com',
-          phone: '+1-555-0123',
-          company: 'Example Corp',
-          status: 'active',
-          lastContact: new Date('2024-01-15'),
-          leadScore: 85,
-          tags: ['enterprise', 'high-value'],
-        };
+      // Use Prisma to query customer data from database
+      const { PrismaClient } = await import('@prisma/client');
+      const prisma = new PrismaClient();
+      
+      // Parse email from query (simple extraction)
+      const emailMatch = query.match(/email\s*=\s*'([^']+)'/i);
+      if (!emailMatch) {
+        await prisma.$disconnect();
+        return null;
       }
-
-      return null;
+      
+      const email = emailMatch[1];
+      
+      // Query actual customer data from database
+      const user = await prisma.user.findUnique({
+        where: { email },
+        include: {
+          organization: true,
+        },
+      });
+      
+      await prisma.$disconnect();
+      
+      if (!user) {
+        return null;
+      }
+      
+      // Transform to CustomerData format
+      return {
+        id: user.id,
+        name: user.name || email.split('@')[0],
+        email: user.email,
+        phone: user.metadata?.phone as string,
+        company: user.organization?.name,
+        status: user.status || 'active',
+        lastContact: user.lastLoginAt || user.updatedAt,
+        leadScore: user.metadata?.leadScore as number || 50,
+        tags: user.metadata?.tags as string[] || [],
+      };
     } catch (error) {
       this.logger.error('CRM query failed', error);
       throw new ServiceError('CRM system unavailable');

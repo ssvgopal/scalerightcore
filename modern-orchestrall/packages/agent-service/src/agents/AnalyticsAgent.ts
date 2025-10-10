@@ -417,13 +417,75 @@ class AnalyticsAgent {
   }
 
   private async fetchData(query: DataQuery): Promise<any[]> {
-    // Mock data fetching - in production would query actual data sources
-    return [
-      { date: '2024-01-01', revenue: 10000, orders: 50, customers: 45 },
-      { date: '2024-01-02', revenue: 12000, orders: 60, customers: 52 },
-      { date: '2024-01-03', revenue: 11000, orders: 55, customers: 48 },
-      // More mock data...
-    ];
+    // Query actual data from database based on metrics and dimensions
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+    
+    try {
+      // Build dynamic query based on requested metrics
+      const results: any[] = [];
+      
+      // Query workflow executions for analytics data
+      const executions = await prisma.workflowExecution.findMany({
+        where: {
+          createdAt: {
+            gte: query.dateRange.start,
+            lte: query.dateRange.end,
+          },
+        },
+        include: {
+          workflow: true,
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      });
+      
+      // Aggregate data by date
+      const dataByDate = new Map<string, any>();
+      
+      executions.forEach(exec => {
+        const dateKey = exec.createdAt.toISOString().split('T')[0];
+        
+        if (!dataByDate.has(dateKey)) {
+          dataByDate.set(dateKey, {
+            date: dateKey,
+            executions: 0,
+            workflows: new Set(),
+            avgDuration: 0,
+            totalDuration: 0,
+          });
+        }
+        
+        const dayData = dataByDate.get(dateKey)!;
+        dayData.executions++;
+        dayData.workflows.add(exec.workflowId);
+        
+        // Calculate duration if available
+        if (exec.completedAt) {
+          const duration = exec.completedAt.getTime() - exec.createdAt.getTime();
+          dayData.totalDuration += duration;
+          dayData.avgDuration = dayData.totalDuration / dayData.executions;
+        }
+      });
+      
+      // Convert to array format
+      dataByDate.forEach((value, key) => {
+        results.push({
+          date: key,
+          executions: value.executions,
+          workflows: value.workflows.size,
+          avgDuration: Math.round(value.avgDuration),
+        });
+      });
+      
+      await prisma.$disconnect();
+      return results;
+    } catch (error) {
+      this.logger.error('Data fetch failed', error);
+      await prisma.$disconnect();
+      throw new ServiceError('Failed to fetch analytics data');
+    }
   }
 
   private formatQueryResults(data: any[], query: DataQuery): string {
