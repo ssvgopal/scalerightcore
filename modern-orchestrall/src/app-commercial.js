@@ -606,6 +606,208 @@ app.post('/api/keys', {
   }
 });
 
+// Workflow Intelligence Agent endpoints
+app.post('/api/workflow-intelligence/analyze', {
+  preHandler: async (request, reply) => {
+    const hasJWT = request.headers.authorization;
+    const hasAPIKey = request.headers['x-api-key'];
+    
+    if (!hasJWT && !hasAPIKey) {
+      reply.code(401).send({ error: 'Authentication required' });
+      return;
+    }
+    
+    if (hasJWT) {
+      return await authenticateRequest(request, reply);
+    } else {
+      return await authenticateAPIKey(request, reply);
+    }
+  },
+  schema: {
+    description: 'Analyze workflows, integrations, and conflicts',
+    tags: ['Workflow Intelligence'],
+    body: {
+      type: 'object',
+      required: ['businessDescription'],
+      properties: {
+        businessDescription: { type: 'string' },
+        analysisType: { 
+          type: 'string',
+          enum: ['customer-onboarding', 'integration-compatibility', 'workflow-conflicts', 'architecture-assessment', 'integration-recommendations']
+        },
+        context: { type: 'object' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  const startTime = Date.now();
+  const { businessDescription, analysisType, context = {} } = request.body;
+
+  try {
+    const agentSystem = require('./agents');
+    const result = await agentSystem.executeAgent('workflow-intelligence', businessDescription, {
+      ...context,
+      analysisType,
+      userId: request.userId,
+      organizationId: request.organizationId
+    });
+
+    const duration = Date.now() - startTime;
+    monitoringService.recordHttpRequest('POST', '/api/workflow-intelligence/analyze', 200, duration / 1000);
+
+    return {
+      success: true,
+      result,
+      executionTime: duration,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    logger.error('Workflow intelligence analysis error', error);
+    monitoringService.recordHttpRequest('POST', '/api/workflow-intelligence/analyze', 500, (Date.now() - startTime) / 1000);
+    reply.code(500).send({ error: 'Workflow analysis failed' });
+  }
+});
+
+// Plugin Management endpoints
+app.get('/api/plugins', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get available plugins',
+    tags: ['Plugins'],
+    querystring: {
+      type: 'object',
+      properties: {
+        category: { type: 'string' },
+        organizationId: { type: 'string' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const PluginManager = require('./plugins/plugin-manager');
+    const pluginManager = new PluginManager();
+    await pluginManager.initialize();
+
+    const { category, organizationId } = request.query;
+    const plugins = pluginManager.getAvailablePlugins(category);
+    const installedPlugins = organizationId ? pluginManager.getInstalledPlugins(organizationId) : [];
+
+    return {
+      success: true,
+      data: {
+        available: plugins,
+        installed: installedPlugins,
+        total: plugins.length
+      }
+    };
+  } catch (error) {
+    logger.error('Plugin listing error', error);
+    reply.code(500).send({ error: 'Failed to list plugins' });
+  }
+});
+
+app.post('/api/plugins/install', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Install a plugin',
+    tags: ['Plugins'],
+    body: {
+      type: 'object',
+      required: ['pluginId', 'organizationId'],
+      properties: {
+        pluginId: { type: 'string' },
+        organizationId: { type: 'string' },
+        config: { type: 'object' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const PluginManager = require('./plugins/plugin-manager');
+    const pluginManager = new PluginManager();
+    await pluginManager.initialize();
+
+    const { pluginId, organizationId, config = {} } = request.body;
+    const result = await pluginManager.installPlugin(organizationId, pluginId, config);
+
+    return {
+      success: true,
+      data: result,
+      message: `Plugin ${pluginId} installed successfully`
+    };
+  } catch (error) {
+    logger.error('Plugin installation error', error);
+    reply.code(400).send({ error: error.message });
+  }
+});
+
+app.post('/api/plugins/recommendations', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get plugin recommendations based on business description',
+    tags: ['Plugins'],
+    body: {
+      type: 'object',
+      required: ['businessDescription', 'organizationId'],
+      properties: {
+        businessDescription: { type: 'string' },
+        organizationId: { type: 'string' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const PluginManager = require('./plugins/plugin-manager');
+    const pluginManager = new PluginManager();
+    await pluginManager.initialize();
+
+    const { businessDescription, organizationId } = request.body;
+    const recommendations = await pluginManager.getPluginRecommendations(businessDescription, organizationId);
+
+    return {
+      success: true,
+      data: {
+        recommendations,
+        total: recommendations.length
+      }
+    };
+  } catch (error) {
+    logger.error('Plugin recommendations error', error);
+    reply.code(500).send({ error: 'Failed to generate recommendations' });
+  }
+});
+
+app.get('/api/plugins/compatibility/:organizationId', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get plugin compatibility report',
+    tags: ['Plugins'],
+    params: {
+      type: 'object',
+      properties: {
+        organizationId: { type: 'string' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const PluginManager = require('./plugins/plugin-manager');
+    const pluginManager = new PluginManager();
+    await pluginManager.initialize();
+
+    const { organizationId } = request.params;
+    const report = pluginManager.generateCompatibilityReport(organizationId);
+
+    return {
+      success: true,
+      data: report
+    };
+  } catch (error) {
+    logger.error('Compatibility report error', error);
+    reply.code(500).send({ error: 'Failed to generate compatibility report' });
+  }
+});
+
 // Legacy endpoints for backward compatibility
 app.get('/test', async (request, reply) => {
   reply.send({ 

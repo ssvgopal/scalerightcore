@@ -94,6 +94,14 @@ class AgentSystem {
       execute: this.executeNumberAnalyzer.bind(this),
     });
 
+    // Workflow Intelligence Agent
+    this.agents.set('workflow-intelligence', {
+      name: 'Workflow Intelligence',
+      description: 'Advanced workflow analysis, integration compatibility, and conflict detection',
+      capabilities: ['customer-onboarding-analysis', 'integration-compatibility', 'workflow-conflict-detection', 'architecture-assessment'],
+      execute: this.executeWorkflowIntelligence.bind(this),
+    });
+
     // Echo Agent (for backward compatibility)
     this.agents.set('echo', {
       name: 'Echo',
@@ -542,6 +550,35 @@ class AgentSystem {
       if (num % i === 0) return false;
     }
     return true;
+  }
+
+  // Workflow Intelligence Agent Implementation
+  async executeWorkflowIntelligence(input, context) {
+    try {
+      const WorkflowIntelligenceAgent = require('./workflow-intelligence-agent');
+      const agent = new WorkflowIntelligenceAgent();
+      await agent.initialize();
+      
+      const result = await agent.process(input, context);
+      
+      return {
+        content: result.result.content,
+        structuredData: result.result.structuredData,
+        recommendations: result.result.recommendations,
+        compatibilityMatrix: result.result.compatibilityMatrix,
+        conflictReport: result.result.conflictReport,
+        resolutionStrategies: result.result.resolutionStrategies,
+        priorityMatrix: result.result.priorityMatrix,
+        implementationRoadmap: result.result.implementationRoadmap,
+        costAnalysis: result.result.costAnalysis,
+        riskAssessment: result.result.riskAssessment,
+        confidence: result.result.confidence,
+        analysisType: result.metadata.analysisType,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      throw new Error(`Workflow intelligence analysis failed: ${error.message}`);
+    }
   }
 
   // Echo Agent Implementation
