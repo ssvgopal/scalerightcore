@@ -1,0 +1,329 @@
+# Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orchestrall
+  labels:
+    name: orchestrall
+    environment: production
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orchestrall-config
+  namespace: orchestrall
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOST: "0.0.0.0"
+  LOG_LEVEL: "info"
+  ENABLE_METRICS: "true"
+  METRICS_PORT: "9090"
+  PROMETHEUS_ENABLED: "true"
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orchestrall-secrets
+  namespace: orchestrall
+type: Opaque
+data:
+  DATABASE_URL: cG9zdGdyZXNxbDovL29yY2hlc3RyYWxsOnNlY3VyZV9wYXNzd29yZF8xMjNAcG9zdGdyZXM6NTQzMi9vcmNoZXN0cmFsbF9wcm9k
+  REDIS_URL: cmVkaXM6Ly9yZWRpczozNjc5
+  JWT_SECRET: c3VwZXItc2VjdXJlLWp3dC1zZWNyZXQta2V5LWNoYW5nZS1pbi1wcm9kdWN0aW9uLTIwMjQ=
+  OPENAI_API_KEY: c2steW91ci1vcGVuYWktYXBpLWtleS1oZXJl
+---
+# PostgreSQL StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: orchestrall
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: orchestrall_prod
+        - name: POSTGRES_USER
+          value: orchestrall
+        - name: POSTGRES_PASSWORD
+          value: secure_password_123
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - orchestrall
+            - -d
+            - orchestrall_prod
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - orchestrall
+            - -d
+            - orchestrall_prod
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: orchestrall
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+---
+# Redis StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: orchestrall
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command:
+        - redis-server
+        - --requirepass
+        - redis_secure_password
+        - --appendonly
+        - "yes"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 5Gi
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: orchestrall
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+---
+# Orchestrall Application Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrall-app
+  namespace: orchestrall
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orchestrall-app
+  template:
+    metadata:
+      labels:
+        app: orchestrall-app
+    spec:
+      containers:
+      - name: orchestrall-app
+        image: orchestrall/platform:latest
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: orchestrall-config
+        - secretRef:
+            name: orchestrall-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: uploads
+          mountPath: /app/uploads
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: uploads
+        emptyDir: {}
+---
+# Orchestrall Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrall-app
+  namespace: orchestrall
+spec:
+  selector:
+    app: orchestrall-app
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orchestrall-ingress
+  namespace: orchestrall
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  tls:
+  - hosts:
+    - api.orchestrall.com
+    secretName: orchestrall-tls
+  rules:
+  - host: api.orchestrall.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: orchestrall-app
+            port:
+              number: 3000
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: orchestrall-hpa
+  namespace: orchestrall
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: orchestrall-app
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: orchestrall-pdb
+  namespace: orchestrall
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: orchestrall-app

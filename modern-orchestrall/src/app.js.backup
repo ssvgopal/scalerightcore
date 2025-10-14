@@ -1,0 +1,64 @@
+// src/app.js - WORKING VERSION WITH ECHO AGENT
+const fastify = require('fastify')({ logger: false });
+
+// Simple test endpoint
+fastify.get('/test', (request, reply) => {
+  reply.send({ message: 'Server is working' });
+});
+
+// Health check
+fastify.get('/api/health', (request, reply) => {
+  reply.send({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// List agents
+fastify.get('/api/agents', (request, reply) => {
+  reply.send({
+    success: true,
+    agents: [
+      { name: 'echo', description: 'Returns input exactly as provided' }
+    ],
+    count: 1
+  });
+});
+
+// Echo agent
+fastify.post('/api/agents/echo/execute', (request, reply) => {
+  const { input } = request.body;
+
+  if (!input) {
+    reply.code(400).send({
+      success: false,
+      error: 'Input is required'
+    });
+    return;
+  }
+
+  reply.send({
+    success: true,
+    result: input,
+    metadata: {
+      agentName: 'echo',
+      executionTime: new Date().toISOString()
+    }
+  });
+});
+
+// Start server
+fastify.listen({ port: 3000, host: '0.0.0.0' }, (err) => {
+  if (err) {
+    console.error('Error starting server:', err);
+    process.exit(1);
+  }
+
+  console.log('✅ Server running on http://localhost:3000');
+  console.log('📋 Endpoints:');
+  console.log('   GET  /test - Basic test');
+  console.log('   GET  /api/health - Health check');
+  console.log('   GET  /api/agents - List agents');
+  console.log('   POST /api/agents/echo/execute - Echo agent');
+});

@@ -1,23 +1,28 @@
-# Dockerfile for Orchestrall MVP
+# Multi-stage Dockerfile for Orchestrall Platform
 FROM node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci --only=production && npm cache clean --force
 
-# Build the application
+# Rebuild the source code only when needed
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build TypeScript
+# Generate Prisma client
+RUN npx prisma generate
+
+# Build the application
 RUN npm run build
 
 # Production image
@@ -29,20 +34,29 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 orchestrall
 
 # Copy built application
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=orchestrall:nodejs /app/dist ./dist
+COPY --from=builder --chown=orchestrall:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=orchestrall:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=orchestrall:nodejs /app/package*.json ./
 
-# Set correct permissions
-RUN chown -R orchestrall:nodejs /app
+# Create necessary directories
+RUN mkdir -p /app/logs /app/uploads /app/backups
+RUN chown -R orchestrall:nodejs /app/logs /app/uploads /app/backups
+
+# Switch to non-root user
 USER orchestrall
 
 # Expose port
 EXPOSE 3000
 
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOST=0.0.0.0
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health || exit 1
+  CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start the application
-CMD ["npm", "start"]
+CMD ["node", "dist/app.js"]
