@@ -1,38 +1,25 @@
 {
-  "name": "orchestrall-mvp",
-  "version": "1.0.0-mvp",
-  "description": "Orchestrall AI Platform - MVP Launch Version",
-  "main": "dist/index.js",
-  "type": "module",
+  "name": "orchestrall-secure",
+  "version": "1.0.1-secure",
+  "description": "Orchestrall Platform - Secure Implementation",
+  "main": "src/app.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "test": "echo \"No tests yet\" && exit 0",
-    "lint": "echo \"No linting yet\" && exit 0"
+    "start": "node src/app.js",
+    "dev": "node src/app.js",
+    "test": "echo \"Tests coming soon\""
   },
   "dependencies": {
-    "@fastify/cors": "^8.4.0",
-    "bcrypt": "^5.1.1",
     "fastify": "^4.24.3",
-    "jsonwebtoken": "^9.0.2"
-  },
-  "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
-    "@types/jsonwebtoken": "^9.0.5",
-    "@types/node": "^20.10.0",
-    "tsx": "^4.6.2",
-    "typescript": "^5.3.2"
+    "bcrypt": "^5.1.1"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=16.0.0"
   },
   "keywords": [
     "ai",
     "agents",
     "automation",
-    "orchestrall",
-    "mvp"
+    "secure"
   ],
   "author": "Orchestrall Team",
   "license": "MIT"
