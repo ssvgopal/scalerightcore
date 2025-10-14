@@ -808,6 +808,177 @@ app.get('/api/plugins/compatibility/:organizationId', {
   }
 });
 
+// Autonomous Platform endpoints
+app.get('/api/autonomous/status', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get autonomous platform status',
+    tags: ['Autonomous Platform'],
+    response: {
+      200: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean' },
+          data: { type: 'object' }
+        }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const status = autonomousPlatformManager.getAutonomousPlatformStatus();
+    return {
+      success: true,
+      data: status
+    };
+  } catch (error) {
+    logger.error('Autonomous status error', error);
+    reply.code(500).send({ error: 'Failed to get autonomous status' });
+  }
+});
+
+app.post('/api/autonomous/mode', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Enable or disable autonomous mode',
+    tags: ['Autonomous Platform'],
+    body: {
+      type: 'object',
+      required: ['enabled'],
+      properties: {
+        enabled: { type: 'boolean' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { enabled } = request.body;
+    autonomousPlatformManager.setAutonomousMode(enabled);
+    
+    return {
+      success: true,
+      message: `Autonomous mode ${enabled ? 'enabled' : 'disabled'}`,
+      data: { enabled }
+    };
+  } catch (error) {
+    logger.error('Autonomous mode change error', error);
+    reply.code(500).send({ error: 'Failed to change autonomous mode' });
+  }
+});
+
+app.get('/api/autonomous/policies', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get autonomous policies',
+    tags: ['Autonomous Platform']
+  }
+}, async (request, reply) => {
+  try {
+    const policies = autonomousPlatformManager.getAutonomousPolicies();
+    return {
+      success: true,
+      data: policies
+    };
+  } catch (error) {
+    logger.error('Autonomous policies error', error);
+    reply.code(500).send({ error: 'Failed to get autonomous policies' });
+  }
+});
+
+app.put('/api/autonomous/policies/:policyId', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Update autonomous policy',
+    tags: ['Autonomous Platform'],
+    params: {
+      type: 'object',
+      properties: {
+        policyId: { type: 'string' }
+      }
+    },
+    body: {
+      type: 'object',
+      properties: {
+        enabled: { type: 'boolean' },
+        rules: { type: 'array' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { policyId } = request.params;
+    const updates = request.body;
+    
+    autonomousPlatformManager.updateAutonomousPolicy(policyId, updates);
+    
+    return {
+      success: true,
+      message: `Policy ${policyId} updated successfully`,
+      data: { policyId, updates }
+    };
+  } catch (error) {
+    logger.error('Autonomous policy update error', error);
+    reply.code(500).send({ error: 'Failed to update autonomous policy' });
+  }
+});
+
+app.get('/api/autonomous/health', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get autonomous system health',
+    tags: ['Autonomous Platform']
+  }
+}, async (request, reply) => {
+  try {
+    const healthStatus = autonomousPlatformManager.selfHealingSystem.getSystemHealthStatus();
+    return {
+      success: true,
+      data: healthStatus
+    };
+  } catch (error) {
+    logger.error('Autonomous health error', error);
+    reply.code(500).send({ error: 'Failed to get autonomous health' });
+  }
+});
+
+app.get('/api/autonomous/learning', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get learning engine status',
+    tags: ['Autonomous Platform']
+  }
+}, async (request, reply) => {
+  try {
+    const learningStatus = autonomousPlatformManager.learningEngine.getStatus();
+    return {
+      success: true,
+      data: learningStatus
+    };
+  } catch (error) {
+    logger.error('Learning engine status error', error);
+    reply.code(500).send({ error: 'Failed to get learning engine status' });
+  }
+});
+
+app.get('/api/autonomous/orchestration', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get agent orchestration status',
+    tags: ['Autonomous Platform']
+  }
+}, async (request, reply) => {
+  try {
+    const orchestrationStatus = autonomousPlatformManager.agentOrchestrator.getStatus();
+    return {
+      success: true,
+      data: orchestrationStatus
+    };
+  } catch (error) {
+    logger.error('Agent orchestration status error', error);
+    reply.code(500).send({ error: 'Failed to get orchestration status' });
+  }
+});
+
 // Legacy endpoints for backward compatibility
 app.get('/test', async (request, reply) => {
   reply.send({ 
@@ -820,6 +991,9 @@ app.get('/test', async (request, reply) => {
 app.get('/api/health', async (request, reply) => {
   reply.redirect('/health');
 });
+
+// Autonomous Platform Manager
+let autonomousPlatformManager = null;
 
 // Initialize and start server
 async function start() {
@@ -838,6 +1012,12 @@ async function start() {
     // Register plugins
     await registerPlugins();
     logger.info('Plugins registered');
+    
+    // Initialize autonomous platform manager
+    const AutonomousPlatformManager = require('./autonomous/autonomous-platform-manager');
+    autonomousPlatformManager = new AutonomousPlatformManager();
+    await autonomousPlatformManager.initialize();
+    logger.info('Autonomous Platform Manager initialized');
     
     // Start monitoring
     monitoringService.startPerformanceMonitoring();
