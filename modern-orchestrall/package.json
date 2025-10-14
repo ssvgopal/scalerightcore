@@ -1,59 +1,39 @@
 {
-  "name": "orchestrall-modern",
-  "version": "2.0.0",
-  "description": "Next-generation enterprise platform with hybrid deployment and agentic AI",
-  "private": true,
-  "workspaces": [
-    "packages/*",
-    "src/*"
-  ],
+  "name": "orchestrall-mvp",
+  "version": "1.0.0-mvp",
+  "description": "Orchestrall AI Platform - MVP Launch Version",
+  "main": "dist/index.js",
+  "type": "module",
   "scripts": {
-    "build": "turbo build",
-    "dev": "turbo dev",
-    "lint": "turbo lint",
-    "test": "turbo test",
-    "test:watch": "turbo test:watch",
-    "clean": "turbo clean && rm -rf node_modules",
-    "db:generate": "turbo db:generate",
-    "db:migrate": "turbo db:migrate",
-    "db:seed": "turbo db:seed",
-    "docker:build": "docker-compose build",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "k8s:deploy": "kubectl apply -f deployment/kubernetes/",
-    "k8s:destroy": "kubectl delete -f deployment/kubernetes/",
-    "observability:up": "cd deployment/observability && docker-compose up -d",
-    "observability:down": "cd deployment/observability && docker-compose down",
-    "observability:logs": "cd deployment/observability && docker-compose logs -f",
-    "agent:build": "turbo agent:build",
-    "agent:test": "turbo agent:test"
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "echo \"No tests yet\" && exit 0",
+    "lint": "echo \"No linting yet\" && exit 0"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/api-logs": "^0.48.0",
-    "@opentelemetry/auto-instrumentations-node": "^0.45.0",
-    "@opentelemetry/exporter-jaeger": "^1.21.0",
-    "@opentelemetry/exporter-otlp-grpc": "^0.48.0",
-    "@opentelemetry/exporter-otlp-http": "^0.48.0",
-    "@opentelemetry/exporter-prometheus": "^0.48.0",
-    "@opentelemetry/sdk-logs": "^0.48.0",
-    "@opentelemetry/sdk-metrics": "^1.21.0",
-    "@opentelemetry/sdk-node": "^0.48.0",
-    "@opentelemetry/sdk-trace-node": "^1.21.0",
-    "@opentelemetry/semantic-conventions": "^1.21.0"
+    "@fastify/cors": "^8.4.0",
+    "bcrypt": "^5.1.1",
+    "fastify": "^4.24.3",
+    "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "turbo": "^1.12.0",
-    "typescript": "^5.0.0",
-    "eslint": "^8.0.0",
-    "prettier": "^3.0.0",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0"
+    "@types/bcrypt": "^5.0.2",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.2"
   },
   "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=18.0.0"
   },
-  "packageManager": "npm@9.0.0"
+  "keywords": [
+    "ai",
+    "agents",
+    "automation",
+    "orchestrall",
+    "mvp"
+  ],
+  "author": "Orchestrall Team",
+  "license": "MIT"
 }
