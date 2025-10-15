@@ -11,6 +11,7 @@ class HumanInTheLoopSystem extends EventEmitter {
     this.escalationRules = new Map();
     this.interventionPoints = new Map();
     this.humanOversight = new Map();
+    this.intelligentEscalation = null;
     this.initializeHITLFramework();
   }
 
@@ -18,6 +19,12 @@ class HumanInTheLoopSystem extends EventEmitter {
     this.prisma = database.client;
     await this.loadHITLConfigurations();
     await this.startHITLMonitoring();
+    
+    // Initialize intelligent escalation system
+    const IntelligentEscalationSystem = require('./intelligent-escalation-system');
+    this.intelligentEscalation = new IntelligentEscalationSystem();
+    await this.intelligentEscalation.initialize();
+    logger.info('Intelligent Escalation System initialized');
   }
 
   // Initialize HITL framework
@@ -850,6 +857,120 @@ class HumanInTheLoopSystem extends EventEmitter {
       logger.error('Failed to get approval history', error);
       return [];
     }
+  }
+
+  // Enhanced escalation using intelligent escalation system
+  async escalateApprovalRequestIntelligent(approvalRequest) {
+    try {
+      logger.warn(`Intelligent escalation for approval request: ${approvalRequest.id}`, {
+        escalationLevel: approvalRequest.escalationLevel,
+        riskLevel: approvalRequest.riskLevel
+      });
+
+      if (this.intelligentEscalation) {
+        const escalationContext = {
+          operation: approvalRequest.operation,
+          urgency: approvalRequest.escalationLevel,
+          impact: approvalRequest.riskLevel,
+          context: {
+            approvalRequestId: approvalRequest.id,
+            interventionPoint: approvalRequest.interventionPoint,
+            approvers: approvalRequest.approvers,
+            timeout: approvalRequest.timeout,
+            businessImpact: this.calculateBusinessImpact(approvalRequest),
+            financialImpact: this.calculateFinancialImpact(approvalRequest),
+            customerImpact: this.calculateCustomerImpact(approvalRequest)
+          }
+        };
+
+        const escalationDecision = await this.intelligentEscalation.makeEscalationDecision(
+          approvalRequest.operation,
+          escalationContext.context,
+          approvalRequest.escalationLevel,
+          approvalRequest.riskLevel
+        );
+
+        if (escalationDecision.shouldEscalate) {
+          const escalationResult = await this.intelligentEscalation.executeIntelligentEscalation(escalationDecision);
+          
+          // Update approval request with intelligent escalation info
+          approvalRequest.status = 'escalated';
+          approvalRequest.escalatedAt = new Date().toISOString();
+          approvalRequest.escalationId = escalationResult.escalationId;
+          approvalRequest.escalationPath = escalationDecision.escalationPath;
+          approvalRequest.predictedResolutionTime = escalationResult.estimatedResolutionTime;
+          await this.updateApprovalRequest(approvalRequest);
+
+          // Emit intelligent escalation event
+          this.emit('intelligent-approval-escalated', {
+            approvalRequest,
+            escalationDecision,
+            escalationResult,
+            reason: 'intelligent-escalation'
+          });
+
+          return escalationResult;
+        }
+      }
+
+      // Fallback to original escalation
+      return await this.escalateApprovalRequest(approvalRequest);
+    } catch (error) {
+      logger.error(`Failed to perform intelligent escalation for ${approvalRequest.id}`, error);
+      // Fallback to original escalation
+      return await this.escalateApprovalRequest(approvalRequest);
+    }
+  }
+
+  // Calculate business impact for escalation context
+  calculateBusinessImpact(approvalRequest) {
+    const impactMap = {
+      'critical': 'critical',
+      'high': 'high',
+      'medium': 'medium',
+      'low': 'low'
+    };
+    return impactMap[approvalRequest.riskLevel] || 'medium';
+  }
+
+  // Calculate financial impact for escalation context
+  calculateFinancialImpact(approvalRequest) {
+    // Simulate financial impact calculation
+    const financialImpactMap = {
+      'critical': 10000,
+      'high': 5000,
+      'medium': 1000,
+      'low': 100
+    };
+    return financialImpactMap[approvalRequest.riskLevel] || 1000;
+  }
+
+  // Calculate customer impact for escalation context
+  calculateCustomerImpact(approvalRequest) {
+    // Simulate customer impact calculation
+    const customerImpactMap = {
+      'critical': 1000,
+      'high': 500,
+      'medium': 100,
+      'low': 10
+    };
+    return customerImpactMap[approvalRequest.riskLevel] || 100;
+  }
+
+  // Get intelligent escalation status
+  getIntelligentEscalationStatus() {
+    if (this.intelligentEscalation) {
+      return this.intelligentEscalation.getEscalationSystemStatus();
+    }
+    return { status: 'not-initialized' };
+  }
+
+  // Get escalation analytics
+  getEscalationAnalytics() {
+    if (this.intelligentEscalation) {
+      return this.intelligentEscalation.getEscalationAnalytics();
+    }
+    return { status: 'not-available' };
   }
 }
 
