@@ -675,3 +675,4 @@ class WorkflowIntelligenceAgent {
 }
 
 module.exports = WorkflowIntelligenceAgent;
+

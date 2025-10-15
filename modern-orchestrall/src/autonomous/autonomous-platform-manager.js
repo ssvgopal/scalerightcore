@@ -814,3 +814,4 @@ class AutonomousPlatformManager extends EventEmitter {
 }
 
 module.exports = AutonomousPlatformManager;
+

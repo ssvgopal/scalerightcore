@@ -589,6 +589,20 @@ class AgentSystem {
       timestamp: new Date().toISOString(),
     };
   }
+
+  // List all available agents
+  listAgents() {
+    const agentList = [];
+    for (const [key, agent] of this.agents) {
+      agentList.push({
+        name: key,
+        displayName: agent.name,
+        description: agent.description,
+        capabilities: agent.capabilities
+      });
+    }
+    return agentList;
+  }
 }
 
 // Create singleton instance

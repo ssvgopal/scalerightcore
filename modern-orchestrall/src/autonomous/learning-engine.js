@@ -114,11 +114,11 @@ class SelfLearningEngine extends EventEmitter {
       // Load agent execution history
       const executions = await this.prisma.agentExecution.findMany({
         where: {
-          createdAt: {
+          startedAt: {
             gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // Last 30 days
           }
         },
-        orderBy: { createdAt: 'asc' }
+        orderBy: { startedAt: 'asc' }
       });
 
       // Load user behavior data

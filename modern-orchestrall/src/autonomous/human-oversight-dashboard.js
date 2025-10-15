@@ -1522,3 +1522,4 @@ class HumanOversightDashboard extends EventEmitter {
 }
 
 module.exports = HumanOversightDashboard;
+
