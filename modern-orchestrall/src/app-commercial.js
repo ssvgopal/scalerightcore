@@ -979,6 +979,309 @@ app.get('/api/autonomous/orchestration', {
   }
 });
 
+// Human-in-the-Loop endpoints
+app.post('/api/hitl/approval/request', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Request human approval for autonomous operation',
+    tags: ['Human-in-the-Loop'],
+    body: {
+      type: 'object',
+      required: ['operation', 'context'],
+      properties: {
+        operation: { type: 'string' },
+        context: { type: 'object' },
+        decision: { type: 'object' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { operation, context, decision } = request.body;
+    const humanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const hitlSystem = new humanInTheLoopSystem();
+    await hitlSystem.initialize();
+    
+    const approvalResult = await hitlSystem.createApprovalRequest(operation, context, decision);
+    
+    return {
+      success: true,
+      data: approvalResult
+    };
+  } catch (error) {
+    logger.error('Approval request error', error);
+    reply.code(500).send({ error: 'Failed to create approval request' });
+  }
+});
+
+app.post('/api/hitl/approval/:approvalId/respond', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Respond to approval request',
+    tags: ['Human-in-the-Loop'],
+    params: {
+      type: 'object',
+      properties: {
+        approvalId: { type: 'string' }
+      }
+    },
+    body: {
+      type: 'object',
+      required: ['decision'],
+      properties: {
+        decision: { type: 'string', enum: ['approve', 'reject'] },
+        comments: { type: 'string' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { approvalId } = request.params;
+    const { decision, comments } = request.body;
+    const approver = request.userId;
+    
+    const humanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const hitlSystem = new humanInTheLoopSystem();
+    await hitlSystem.initialize();
+    
+    const result = await hitlSystem.processApprovalResponse(approvalId, approver, decision, comments);
+    
+    return {
+      success: true,
+      data: result
+    };
+  } catch (error) {
+    logger.error('Approval response error', error);
+    reply.code(500).send({ error: 'Failed to process approval response' });
+  }
+});
+
+app.get('/api/hitl/approvals/pending', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get pending approval requests',
+    tags: ['Human-in-the-Loop']
+  }
+}, async (request, reply) => {
+  try {
+    const humanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const hitlSystem = new humanInTheLoopSystem();
+    await hitlSystem.initialize();
+    
+    const pendingApprovals = await hitlSystem.getPendingApprovals();
+    
+    return {
+      success: true,
+      data: pendingApprovals
+    };
+  } catch (error) {
+    logger.error('Pending approvals error', error);
+    reply.code(500).send({ error: 'Failed to get pending approvals' });
+  }
+});
+
+app.get('/api/hitl/approvals/history', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get approval history',
+    tags: ['Human-in-the-Loop'],
+    querystring: {
+      type: 'object',
+      properties: {
+        limit: { type: 'number', default: 50 }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { limit } = request.query;
+    const humanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const hitlSystem = new humanInTheLoopSystem();
+    await hitlSystem.initialize();
+    
+    const approvalHistory = await hitlSystem.getApprovalHistory(limit);
+    
+    return {
+      success: true,
+      data: approvalHistory
+    };
+  } catch (error) {
+    logger.error('Approval history error', error);
+    reply.code(500).send({ error: 'Failed to get approval history' });
+  }
+});
+
+app.get('/api/hitl/status', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get Human-in-the-Loop system status',
+    tags: ['Human-in-the-Loop']
+  }
+}, async (request, reply) => {
+  try {
+    const humanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const hitlSystem = new humanInTheLoopSystem();
+    await hitlSystem.initialize();
+    
+    const status = hitlSystem.getHITLStatus();
+    
+    return {
+      success: true,
+      data: status
+    };
+  } catch (error) {
+    logger.error('HITL status error', error);
+    reply.code(500).send({ error: 'Failed to get HITL status' });
+  }
+});
+
+// Human Oversight Dashboard endpoints
+app.get('/api/dashboard/:dashboardId', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get dashboard data',
+    tags: ['Human Oversight Dashboard'],
+    params: {
+      type: 'object',
+      properties: {
+        dashboardId: { type: 'string' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { dashboardId } = request.params;
+    const userId = request.userId;
+    
+    const humanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const dashboard = new humanOversightDashboard();
+    await dashboard.initialize();
+    
+    const dashboardData = await dashboard.getDashboardData(dashboardId, userId);
+    
+    return {
+      success: true,
+      data: dashboardData
+    };
+  } catch (error) {
+    logger.error('Dashboard data error', error);
+    reply.code(500).send({ error: 'Failed to get dashboard data' });
+  }
+});
+
+app.post('/api/dashboard/control/:controlPanelId/:controlId', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Execute control action',
+    tags: ['Human Oversight Dashboard'],
+    params: {
+      type: 'object',
+      properties: {
+        controlPanelId: { type: 'string' },
+        controlId: { type: 'string' }
+      }
+    },
+    body: {
+      type: 'object',
+      properties: {
+        parameters: { type: 'object' }
+      }
+    }
+  }
+}, async (request, reply) => {
+  try {
+    const { controlPanelId, controlId } = request.params;
+    const { parameters } = request.body;
+    const userId = request.userId;
+    
+    const humanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const dashboard = new humanOversightDashboard();
+    await dashboard.initialize();
+    
+    const result = await dashboard.executeControlAction(controlPanelId, controlId, userId, parameters);
+    
+    return {
+      success: true,
+      data: result
+    };
+  } catch (error) {
+    logger.error('Control execution error', error);
+    reply.code(500).send({ error: 'Failed to execute control action' });
+  }
+});
+
+app.get('/api/dashboard/status', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get dashboard system status',
+    tags: ['Human Oversight Dashboard']
+  }
+}, async (request, reply) => {
+  try {
+    const humanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const dashboard = new humanOversightDashboard();
+    await dashboard.initialize();
+    
+    const status = dashboard.getDashboardStatus();
+    
+    return {
+      success: true,
+      data: status
+    };
+  } catch (error) {
+    logger.error('Dashboard status error', error);
+    reply.code(500).send({ error: 'Failed to get dashboard status' });
+  }
+});
+
+app.get('/api/dashboard/control-panels', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get available control panels',
+    tags: ['Human Oversight Dashboard']
+  }
+}, async (request, reply) => {
+  try {
+    const humanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const dashboard = new humanOversightDashboard();
+    await dashboard.initialize();
+    
+    const controlPanels = dashboard.getControlPanelStatus();
+    
+    return {
+      success: true,
+      data: controlPanels
+    };
+  } catch (error) {
+    logger.error('Control panels error', error);
+    reply.code(500).send({ error: 'Failed to get control panels' });
+  }
+});
+
+app.get('/api/dashboard/alert-systems', {
+  preHandler: authenticateRequest,
+  schema: {
+    description: 'Get alert systems status',
+    tags: ['Human Oversight Dashboard']
+  }
+}, async (request, reply) => {
+  try {
+    const humanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const dashboard = new humanOversightDashboard();
+    await dashboard.initialize();
+    
+    const alertSystems = dashboard.getAlertSystemStatus();
+    
+    return {
+      success: true,
+      data: alertSystems
+    };
+  } catch (error) {
+    logger.error('Alert systems error', error);
+    reply.code(500).send({ error: 'Failed to get alert systems' });
+  }
+});
+
 // Legacy endpoints for backward compatibility
 app.get('/test', async (request, reply) => {
   reply.send({ 
@@ -1018,6 +1321,18 @@ async function start() {
     autonomousPlatformManager = new AutonomousPlatformManager();
     await autonomousPlatformManager.initialize();
     logger.info('Autonomous Platform Manager initialized');
+
+    // Initialize Human-in-the-Loop system
+    const HumanInTheLoopSystem = require('./autonomous/human-in-the-loop');
+    const humanInTheLoopSystem = new HumanInTheLoopSystem();
+    await humanInTheLoopSystem.initialize();
+    logger.info('Human-in-the-Loop System initialized');
+
+    // Initialize Human Oversight Dashboard
+    const HumanOversightDashboard = require('./autonomous/human-oversight-dashboard');
+    const humanOversightDashboard = new HumanOversightDashboard();
+    await humanOversightDashboard.initialize();
+    logger.info('Human Oversight Dashboard initialized');
     
     // Start monitoring
     monitoringService.startPerformanceMonitoring();
