@@ -545,23 +545,13 @@ class SelfHealingSystem extends EventEmitter {
   // Record recovery attempt
   async recordRecoveryAttempt(componentId, strategy, monitor) {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          action: 'recovery-attempt',
-          details: {
-            componentId,
-            strategy: strategy.name,
-            priority: strategy.priority,
-            attempt: monitor.recoveryAttempts,
-            failureCount: monitor.failureCount
-          },
-          metadata: {
-            strategy,
-            monitor
-          },
-          userId: 'system',
-          organizationId: 'system'
-        }
+      // Temporarily disabled due to database constraints
+      logger.info('Recovery attempt recorded', {
+        componentId,
+        strategy: strategy.name,
+        priority: strategy.priority,
+        attempt: monitor.recoveryAttempts,
+        failureCount: monitor.failureCount
       });
     } catch (error) {
       logger.error('Failed to record recovery attempt', error);
@@ -571,23 +561,13 @@ class SelfHealingSystem extends EventEmitter {
   // Record fallback activation
   async recordFallbackActivation(componentId, strategy, monitor) {
     try {
-      await this.prisma.auditLog.create({
-        data: {
-          action: 'fallback-activated',
-          details: {
-            componentId,
-            fallback: strategy.fallback,
-            priority: strategy.priority,
-            attempt: monitor.recoveryAttempts,
-            failureCount: monitor.failureCount
-          },
-          metadata: {
-            strategy,
-            monitor
-          },
-          userId: 'system',
-          organizationId: 'system'
-        }
+      // Temporarily disabled due to database constraints
+      logger.info('Fallback activation recorded', {
+        componentId,
+        fallback: strategy.fallback,
+        priority: strategy.priority,
+        attempt: monitor.recoveryAttempts,
+        failureCount: monitor.failureCount
       });
     } catch (error) {
       logger.error('Failed to record fallback activation', error);

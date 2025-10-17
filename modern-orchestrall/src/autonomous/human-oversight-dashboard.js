@@ -643,7 +643,10 @@ class HumanOversightDashboard extends EventEmitter {
       const pendingApprovals = await this.prisma.auditLog.findMany({
         where: {
           action: 'approval-request-created',
-          'metadata.status': 'pending'
+          details: {
+            path: ['status'],
+            equals: 'pending'
+          }
         },
         orderBy: { createdAt: 'asc' }
       });
@@ -651,16 +654,16 @@ class HumanOversightDashboard extends EventEmitter {
       return {
         totalPending: pendingApprovals.length,
         byPriority: {
-          critical: pendingApprovals.filter(approval => approval.metadata.escalationLevel === 'critical').length,
-          high: pendingApprovals.filter(approval => approval.metadata.escalationLevel === 'high').length,
-          medium: pendingApprovals.filter(approval => approval.metadata.escalationLevel === 'medium').length,
-          low: pendingApprovals.filter(approval => approval.metadata.escalationLevel === 'low').length
+          critical: pendingApprovals.filter(approval => approval.details.escalationLevel === 'critical').length,
+          high: pendingApprovals.filter(approval => approval.details.escalationLevel === 'high').length,
+          medium: pendingApprovals.filter(approval => approval.details.escalationLevel === 'medium').length,
+          low: pendingApprovals.filter(approval => approval.details.escalationLevel === 'low').length
         },
         byRiskLevel: {
-          critical: pendingApprovals.filter(approval => approval.metadata.riskLevel === 'critical').length,
-          high: pendingApprovals.filter(approval => approval.metadata.riskLevel === 'high').length,
-          medium: pendingApprovals.filter(approval => approval.metadata.riskLevel === 'medium').length,
-          low: pendingApprovals.filter(approval => approval.metadata.riskLevel === 'low').length
+          critical: pendingApprovals.filter(approval => approval.details.riskLevel === 'critical').length,
+          high: pendingApprovals.filter(approval => approval.details.riskLevel === 'high').length,
+          medium: pendingApprovals.filter(approval => approval.details.riskLevel === 'medium').length,
+          low: pendingApprovals.filter(approval => approval.details.riskLevel === 'low').length
         },
         averageWaitTime: this.calculateAverageWaitTime(pendingApprovals),
         oldestPending: pendingApprovals.length > 0 ? pendingApprovals[0].createdAt : null

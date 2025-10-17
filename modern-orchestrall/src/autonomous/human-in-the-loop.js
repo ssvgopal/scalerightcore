@@ -644,17 +644,20 @@ class HumanInTheLoopSystem extends EventEmitter {
       const pendingApprovals = await this.prisma.auditLog.findMany({
         where: {
           action: 'approval-request-created',
-          'metadata.status': 'pending'
+          details: {
+            path: ['status'],
+            equals: 'pending'
+          }
         },
         orderBy: { createdAt: 'asc' }
       });
 
       for (const approval of pendingApprovals) {
         const timeSinceCreated = Date.now() - new Date(approval.createdAt).getTime();
-        const timeout = approval.metadata.timeout || 3600000; // Default 1 hour
+        const timeout = approval.details.timeout || 3600000; // Default 1 hour
 
         if (timeSinceCreated > timeout) {
-          await this.handleApprovalTimeout(approval.metadata);
+          await this.handleApprovalTimeout(approval.details);
         }
       }
     } catch (error) {
@@ -669,7 +672,10 @@ class HumanInTheLoopSystem extends EventEmitter {
       const highRiskOperations = await this.prisma.auditLog.findMany({
         where: {
           action: 'autonomous-decision-executed',
-          'details.priority': 'critical'
+          details: {
+            path: ['priority'],
+            equals: 'critical'
+          }
         },
         orderBy: { createdAt: 'desc' },
         take: 10

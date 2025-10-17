@@ -1,4 +1,5 @@
 // src/app.js - Complete Orchestrall Platform Implementation with Commercial Features
+require('dotenv').config();
 const fastify = require('fastify');
 const config = require('./config');
 const logger = require('./utils/logger');
