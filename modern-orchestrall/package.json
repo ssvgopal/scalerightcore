@@ -21,7 +21,19 @@
     "db:seed": "node src/seed.js",
     "db:reset": "npx prisma migrate reset",
     "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix"
+    "lint:fix": "eslint src/ --fix",
+    "deploy:integration": "bash deployment/deploy.sh integration",
+    "deploy:staging": "bash deployment/deploy.sh staging",
+    "deploy:production": "bash deployment/deploy.sh production",
+    "health:integration": "bash deployment/deploy.sh health integration",
+    "health:staging": "bash deployment/deploy.sh health staging",
+    "health:production": "bash deployment/deploy.sh health production",
+    "status:integration": "bash deployment/deploy.sh status integration",
+    "status:staging": "bash deployment/deploy.sh status staging",
+    "status:production": "bash deployment/deploy.sh status production",
+    "rollback:integration": "bash deployment/deploy.sh rollback integration",
+    "rollback:staging": "bash deployment/deploy.sh rollback staging",
+    "rollback:production": "bash deployment/deploy.sh rollback production"
   },
   "jest": {
     "testEnvironment": "node",
