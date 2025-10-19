@@ -1,0 +1,43 @@
+# plugins/payments/razorpay/plugin.yaml
+id: payments/razorpay
+name: Razorpay Payment Gateway
+version: 1.0.0
+description: Integrates with Razorpay for payment processing, refunds, and webhook handling.
+category: payments
+capabilities:
+  - payment-processing
+  - refund-processing
+  - webhook-handling
+  - payment-status-tracking
+  - multi-currency-support
+configSchema:
+  keyId:
+    type: string
+    required: true
+    description: Razorpay Key ID
+  keySecret:
+    type: string
+    required: true
+    secret: true
+    description: Razorpay Key Secret
+  webhookSecret:
+    type: string
+    required: true
+    secret: true
+    description: Razorpay Webhook Secret
+  environment:
+    type: string
+    required: false
+    default: "sandbox"
+    enum: ["sandbox", "production"]
+    description: Razorpay environment (sandbox/production)
+  currency:
+    type: string
+    required: false
+    default: "INR"
+    description: Default currency for payments
+  timeout:
+    type: number
+    required: false
+    default: 30000
+    description: Payment timeout in milliseconds

@@ -28,6 +28,23 @@ model Organization {
   workflows   Workflow[]
   agents      Agent[]
   auditLogs   AuditLog[]
+  products    Product[]
+  inventoryItems InventoryItem[]
+  locations   Location[]
+  orders      Order[]
+  customers   Customer[]
+  farmerProfiles FarmerProfile[]
+  farmerTransactions FarmerTransaction[]
+  storePerformance StorePerformance[]
+  paymentIntents PaymentIntent[]
+  refunds Refund[]
+  leads Lead[]
+  
+  // New client-specific relations
+  voiceCalls  VoiceCall[]
+  stories     Story[]
+  storyTemplates StoryTemplate[]
+  stores      Store[]
 
   @@map("organizations")
 }
@@ -50,6 +67,10 @@ model User {
   auditLogs      AuditLog[]
   createdWorkflows Workflow[]
   createdAgents  Agent[]
+  
+  // New client-specific relations
+  stories        Story[]
+  managedStores  Store[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -310,4 +331,388 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, resource])
   @@map("audit_logs")
+}
+
+// ===== RETAIL PLATFORM MODELS =====
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  sku         String   @unique
+  attributes  Json     @default("{}")  // Client-specific: fabricType, farmerId, etc.
+  metadata    Json     @default("{}")  // Plugin data
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  inventoryItems InventoryItem[]
+  orderItems  OrderItem[]
+  transfers   InventoryTransfer[]
+  reorderRules ReorderRule[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("products")
+}
+
+model InventoryItem {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  storeId    String?
+  store      Store?   @relation(fields: [storeId], references: [id])
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  quantity   Int      @default(0)
+  reserved   Int      @default(0)
+  updatedAt  DateTime @updatedAt
+  @@unique([productId, locationId])
+  @@map("inventory_items")
+}
+
+model Location {
+  id          String @id @default(cuid())
+  name        String
+  type        String  // store, warehouse, farm
+  address     String?
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  inventoryItems InventoryItem[]
+  storePerformance StorePerformance[]
+  @@map("locations")
+}
+
+model Order {
+  id          String @id @default(cuid())
+  orderNumber String @unique
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id])
+  status      String  // pending, confirmed, shipped, delivered, cancelled
+  total       Decimal @db.Decimal(10, 2)
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  items       OrderItem[]
+  paymentIntents PaymentIntent[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Decimal @db.Decimal(10, 2)
+  @@map("order_items")
+}
+
+model Customer {
+  id          String @id @default(cuid())
+  email       String
+  name        String
+  phone       String?
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  orders      Order[]
+  @@map("customers")
+}
+
+model FarmerProfile {
+  id          String @id @default(cuid())
+  name        String
+  farmLocation String
+  region      String
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  transactions FarmerTransaction[]
+  voiceCalls  VoiceCall[]
+  crops       Crop[]
+  @@map("farmer_profiles")
+}
+
+model FarmerTransaction {
+  id          String  @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  orderId     String?
+  amount      Decimal @db.Decimal(10, 2)
+  profitShare Decimal @db.Decimal(5, 2)  // Percentage
+  status      String  // pending, paid
+  createdAt   DateTime @default(now())
+  @@map("farmer_transactions")
+}
+
+model StorePerformance {
+  id         String  @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  storeId    String?
+  store      Store?   @relation(fields: [storeId], references: [id])
+  date       DateTime
+  sales      Decimal @db.Decimal(10, 2)
+  orders     Int
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  @@unique([locationId, date])
+  @@map("store_performance")
+}
+
+// ===== PAYMENT MODELS =====
+
+model PaymentIntent {
+  id                String   @id @default(cuid())
+  razorpayOrderId   String?  @unique
+  razorpayPaymentId String? @unique
+  orderId           String
+  order             Order    @relation(fields: [orderId], references: [id])
+  amount            Decimal  @db.Decimal(10, 2)
+  currency          String   @default("INR")
+  status            String   // created, captured, failed, cancelled
+  capturedAt        DateTime?
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@map("payment_intents")
+}
+
+model Refund {
+  id                String   @id @default(cuid())
+  razorpayRefundId  String   @unique
+  paymentId         String
+  amount            Decimal  @db.Decimal(10, 2)
+  currency          String   @default("INR")
+  status            String   // created, processed, failed
+  reason            String?
+  processedAt       DateTime?
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id])
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  @@map("refunds")
+}
+
+// ===== CRM MODELS =====
+
+model Lead {
+  id             String   @id @default(cuid())
+  zohoId         String?  @unique
+  firstName      String
+  lastName       String
+  email          String
+  phone          String?
+  company        String?
+  source         String?
+  industry       String?
+  status         String?
+  description    String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@map("leads")
+}
+
+// ===== VOICE INTEGRATION MODELS =====
+
+model VoiceCall {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  farmerId    String?
+  farmer      FarmerProfile? @relation(fields: [farmerId], references: [id])
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  language    String
+  duration    Int      // seconds
+  status      String   // active, completed, failed
+  transcript  String?
+  audioUrl    String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  analytics   VoiceAnalytics[]
+  @@map("voice_calls")
+}
+
+model VoiceAnalytics {
+  id          String   @id @default(cuid())
+  callId      String
+  call        VoiceCall @relation(fields: [callId], references: [id])
+  sentiment   String?  // positive, negative, neutral
+  topics      String[] // extracted topics
+  confidence  Float    // AI confidence score
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("voice_analytics")
+}
+
+// ===== STORYTELLING CMS MODELS =====
+
+model Story {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+  templateId  String?
+  template    StoryTemplate? @relation(fields: [templateId], references: [id])
+  status      String   // draft, review, published
+  publishedAt DateTime?
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  media       StoryMedia[]
+  analytics   StoryAnalytics[]
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("stories")
+}
+
+model StoryTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  content     String   // template content
+  category    String   // crop, success, tips
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  stories     Story[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("story_templates")
+}
+
+model StoryMedia {
+  id          String   @id @default(cuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id])
+  type        String   // image, video, audio
+  url         String
+  thumbnail   String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("story_media")
+}
+
+model StoryAnalytics {
+  id          String   @id @default(cuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id])
+  event       String   // view, like, share, comment
+  userId      String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("story_analytics")
+}
+
+// ===== FARMER DASHBOARD MODELS =====
+
+model Crop {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  name        String
+  variety     String?
+  plantingDate DateTime
+  harvestDate DateTime?
+  yield       Decimal? @db.Decimal(10, 2)
+  status      String   // planted, growing, harvested
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("crops")
+}
+
+model WeatherData {
+  id          String   @id @default(cuid())
+  location    String
+  date        DateTime
+  temperature Float
+  humidity    Float
+  rainfall    Float
+  windSpeed   Float
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("weather_data")
+}
+
+model MarketPrice {
+  id          String   @id @default(cuid())
+  commodity   String
+  price       Decimal  @db.Decimal(10, 2)
+  unit        String   // kg, quintal, ton
+  location    String
+  date        DateTime
+  source      String
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("market_prices")
+}
+
+// ===== MULTI-STORE INVENTORY MODELS =====
+
+model Store {
+  id          String   @id @default(cuid())
+  name        String
+  address     String
+  city        String
+  state       String
+  pincode     String
+  managerId   String?
+  manager     User?    @relation(fields: [managerId], references: [id])
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id])
+  inventory   InventoryItem[]
+  transfersFrom InventoryTransfer[] @relation("TransferFrom")
+  transfersTo InventoryTransfer[] @relation("TransferTo")
+  performance StorePerformance[]
+  reorderRules ReorderRule[]
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("stores")
+}
+
+model InventoryTransfer {
+  id          String   @id @default(cuid())
+  fromStoreId String
+  fromStore   Store    @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStoreId   String
+  toStore     Store    @relation("TransferTo", fields: [toStoreId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int
+  status      String   // pending, in-transit, completed
+  requestedBy String
+  approvedBy  String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("inventory_transfers")
+}
+
+model ReorderRule {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store    @relation(fields: [storeId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  minQuantity Int
+  maxQuantity Int
+  isActive    Boolean  @default(true)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("reorder_rules")
 }

@@ -1,0 +1,43 @@
+id: ai/sarvam
+name: Sarvam AI Voice Integration
+version: 1.0.0
+description: Multilingual voice capabilities for Kankatala with Hindi, English, Tamil, Telugu, and Bengali support
+category: ai
+capabilities:
+  - voice-to-text
+  - text-to-speech
+  - multilingual-support
+  - real-time-processing
+  - call-analytics
+configSchema:
+  apiKey:
+    type: string
+    required: true
+    secret: true
+    description: Sarvam AI API Key
+  apiUrl:
+    type: string
+    required: false
+    default: "https://api.sarvam.ai/v1/"
+    description: Sarvam AI API Base URL
+  supportedLanguages:
+    type: array
+    required: false
+    default: ["hi", "en", "ta", "te", "bn"]
+    description: Supported language codes
+  maxDuration:
+    type: number
+    required: false
+    default: 300
+    description: Maximum call duration in seconds
+  storageBucket:
+    type: string
+    required: false
+    default: "orchestrall-voice"
+    description: Cloud storage bucket for audio files
+dependencies:
+  - "@sarvam/ai-sdk"
+  - "ws"
+  - "aws-sdk"
+  - "multer"
+  - "ffmpeg"

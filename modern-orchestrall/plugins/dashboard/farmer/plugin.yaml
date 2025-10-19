@@ -1,0 +1,49 @@
+id: dashboard/farmer
+name: Farmer Dashboard
+version: 1.0.0
+description: Comprehensive dashboard for farmers with transaction history, crop analytics, weather data, and market prices
+category: dashboard
+capabilities:
+  - farmer-profile-management
+  - transaction-history
+  - crop-analytics
+  - weather-integration
+  - market-prices
+  - financial-dashboard
+  - real-time-updates
+configSchema:
+  weatherApiKey:
+    type: string
+    required: true
+    secret: true
+    description: OpenWeatherMap API Key
+  weatherApiUrl:
+    type: string
+    required: false
+    default: "https://api.openweathermap.org/data/2.5/"
+    description: Weather API Base URL
+  commodityApiKey:
+    type: string
+    required: true
+    secret: true
+    description: NCDEX API Key for commodity prices
+  commodityApiUrl:
+    type: string
+    required: false
+    default: "https://api.ncdex.com/v1/"
+    description: Commodity API Base URL
+  updateInterval:
+    type: number
+    required: false
+    default: 300000
+    description: Data update interval in milliseconds (5 minutes)
+  maxHistoryDays:
+    type: number
+    required: false
+    default: 365
+    description: Maximum days of historical data to keep
+dependencies:
+  - "socket.io"
+  - "axios"
+  - "moment"
+  - "lodash"

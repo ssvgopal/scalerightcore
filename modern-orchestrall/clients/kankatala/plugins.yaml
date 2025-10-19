@@ -1,0 +1,34 @@
+# clients/kankatala/plugins.yaml
+enabledPlugins:
+  - id: ecommerce/shopify
+    config:
+      shopName: kankatala-store.myshopify.com
+      accessToken: shpat_YOUR_KANKATALA_SHOPIFY_ACCESS_TOKEN
+      webhookSecret: whsec_YOUR_KANKATALA_SHOPIFY_WEBHOOK_SECRET
+  - id: payments/razorpay
+    config:
+      keyId: rzp_test_YOUR_KANKATALA_RAZORPAY_KEY_ID
+      keySecret: YOUR_KANKATALA_RAZORPAY_KEY_SECRET
+      webhookSecret: YOUR_KANKATALA_RAZORPAY_WEBHOOK_SECRET
+      environment: sandbox
+      currency: INR
+  - id: crm/zoho
+    config:
+      clientId: YOUR_KANKATALA_ZOHO_CLIENT_ID
+      clientSecret: YOUR_KANKATALA_ZOHO_CLIENT_SECRET
+      refreshToken: YOUR_KANKATALA_ZOHO_REFRESH_TOKEN
+      environment: sandbox
+      dataCenter: com
+  - id: ai/sarvam
+    config:
+      apiKey: YOUR_KANKATALA_SARVAM_API_KEY
+      apiUrl: https://api.sarvam.ai/v1/
+      supportedLanguages: ["hi", "en", "ta", "te"]
+      maxDuration: 300
+      storageBucket: "kankatala-voice"
+  - id: inventory/multi-store
+    config:
+      reorderCheckInterval: 3600000
+      transferApprovalRequired: true
+      lowStockThreshold: 10
+      notificationEmail: admin@kankatala.com

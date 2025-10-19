@@ -288,25 +288,13 @@ class AIDecisionEngine {
 - Farmer retention: 85% → 90%, Crop yield accuracy: 92% → 95%
 - Revenue per farmer: $150 → $200, Platform adoption: 65% → 80%
 
-### **Kankatala (Manufacturing) - "Manufacturing Executive Command Center"**
+### **Additional Service Bundles Available**
 
-**Core Services:**
-- **autonomous-platform-manager** - Manufacturing policy automation
-- **human-oversight-dashboard** - Executive production controls
-- **learning-engine** - Predictive maintenance, efficiency optimization
-- **self-healing-system** - Equipment failure recovery
-- **workflow-intelligence** - Production process optimization
-- **plugin-manager** - ERP, MES, industrial IoT integrations
-- **monitoring-service** - Production performance metrics
-- **security-service** - Industrial compliance and security
-
-**Specialized Agents:**
-- Predictive Maintenance Agent, Production Optimization Agent
-- Quality Control Agent, Energy Optimization Agent, Safety Compliance Agent
-
-**Key Metrics:**
-- Equipment uptime: 96.8% → 98%, Production efficiency: 87.2% → 92%
-- Maintenance cost reduction: 35% → 45%, Energy savings: $2.1M → $3M
+**Other Industry-Specific Bundles:**
+- **Manufacturing Executive Command Center** - Production optimization, predictive maintenance
+- **Financial Services Command Center** - Risk management, compliance automation
+- **Healthcare Executive Dashboard** - Patient care optimization, regulatory compliance
+- **Retail Operations Center** - Inventory management, customer analytics
 
 ---
 

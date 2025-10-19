@@ -1296,8 +1296,98 @@ app.get('/api/health', async (request, reply) => {
   reply.redirect('/health');
 });
 
+// Plugin Engine API endpoints
+app.get('/api/plugins', async (request, reply) => {
+  try {
+    const plugins = pluginEngine.getAllPlugins();
+    return {
+      success: true,
+      data: plugins.map(plugin => ({
+        id: plugin.id,
+        name: plugin.name,
+        version: plugin.version,
+        description: plugin.description,
+        category: plugin.category,
+        capabilities: plugin.capabilities
+      }))
+    };
+  } catch (error) {
+    logger.error('Failed to list plugins', error);
+    reply.code(500).send({ error: 'Failed to list plugins' });
+  }
+});
+
+app.get('/api/plugins/:clientId/enabled', async (request, reply) => {
+  try {
+    const { clientId } = request.params;
+    const enabledPlugins = pluginEngine.getEnabledPlugins(clientId);
+    return {
+      success: true,
+      data: enabledPlugins.map(plugin => ({
+        pluginId: plugin.pluginId,
+        clientId: plugin.clientId,
+        config: plugin.config,
+        manifest: plugin.manifest
+      }))
+    };
+  } catch (error) {
+    logger.error('Failed to get enabled plugins', error);
+    reply.code(500).send({ error: 'Failed to get enabled plugins' });
+  }
+});
+
+app.post('/api/plugins/:pluginId/enable', async (request, reply) => {
+  try {
+    const { pluginId } = request.params;
+    const { config, clientId = 'default' } = request.body;
+    
+    const pluginInstance = await pluginEngine.enablePlugin(pluginId, config, clientId);
+    
+    return {
+      success: true,
+      message: `Plugin ${pluginId} enabled for client ${clientId}`,
+      data: { pluginId, clientId }
+    };
+  } catch (error) {
+    logger.error('Failed to enable plugin', error);
+    reply.code(500).send({ error: 'Failed to enable plugin' });
+  }
+});
+
+app.post('/api/plugins/:pluginId/disable', async (request, reply) => {
+  try {
+    const { pluginId } = request.params;
+    const { clientId = 'default' } = request.body;
+    
+    await pluginEngine.disablePlugin(pluginId, clientId);
+    
+    return {
+      success: true,
+      message: `Plugin ${pluginId} disabled for client ${clientId}`,
+      data: { pluginId, clientId }
+    };
+  } catch (error) {
+    logger.error('Failed to disable plugin', error);
+    reply.code(500).send({ error: 'Failed to disable plugin' });
+  }
+});
+
+app.get('/api/plugins/health', async (request, reply) => {
+  try {
+    const healthStatus = await pluginEngine.runHealthChecks();
+    return {
+      success: true,
+      data: Object.fromEntries(healthStatus)
+    };
+  } catch (error) {
+    logger.error('Failed to check plugin health', error);
+    reply.code(500).send({ error: 'Failed to check plugin health' });
+  }
+});
+
 // Autonomous Platform Manager
 let autonomousPlatformManager = null;
+let pluginEngine = null;
 
 // Initialize and start server
 async function start() {
@@ -1316,6 +1406,12 @@ async function start() {
     // Register plugins
     await registerPlugins();
     logger.info('Plugins registered');
+    
+    // Initialize Plugin Engine
+    const PluginEngine = require('./core/engine/PluginEngine');
+    pluginEngine = new PluginEngine(database.client);
+    await pluginEngine.initialize();
+    logger.info('Plugin Engine initialized');
     
     // Initialize autonomous platform manager
     const AutonomousPlatformManager = require('./autonomous/autonomous-platform-manager');

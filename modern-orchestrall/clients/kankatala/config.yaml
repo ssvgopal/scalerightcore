@@ -1,0 +1,15 @@
+client:
+  id: kankatala
+  name: Kankatala Silks
+  tier: enterprise
+  description: Multi-store silk retail chain with 13 locations
+features:
+  multiStore: true
+  voiceCommerce: true
+  inventorySync: true
+  paymentProcessing: true
+settings:
+  timezone: "Asia/Kolkata"
+  currency: "INR"
+  language: "en"
+  defaultLocation: "main-warehouse"
