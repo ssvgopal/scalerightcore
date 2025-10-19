@@ -1385,6 +1385,10 @@ app.get('/api/plugins/health', async (request, reply) => {
   }
 });
 
+// Universal CRUD API Routes
+const universalCRUDRoutes = require('./routes/universal-crud');
+app.register(universalCRUDRoutes, { prisma: database.client });
+
 // Autonomous Platform Manager
 let autonomousPlatformManager = null;
 let pluginEngine = null;
