@@ -45,6 +45,14 @@ model Organization {
   stories     Story[]
   storyTemplates StoryTemplate[]
   stores      Store[]
+  
+  // Real-time features
+  webSocketConnections WebSocketConnection[]
+  realTimeEvents RealTimeEvent[]
+  pushSubscriptions PushSubscription[]
+  payments Payment[]
+  subscriptions Subscription[]
+  notificationPreferences NotificationPreference[]
 
   @@map("organizations")
 }
@@ -74,6 +82,12 @@ model User {
   
   // RBAC relations
   roles          UserRole[]
+  
+  // Real-time features
+  webSocketConnections WebSocketConnection[]
+  realTimeEvents RealTimeEvent[]
+  pushSubscriptions PushSubscription[]
+  notificationPreferences NotificationPreference[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -433,6 +447,8 @@ model FarmerProfile {
   organization Organization @relation(fields: [organizationId], references: [id])
   transactions FarmerTransaction[]
   voiceCalls  VoiceCall[]
+  payments Payment[]
+  subscriptions Subscription[]
   crops       Crop[]
   
   // Enhanced farmer profile fields
@@ -514,11 +530,12 @@ model Refund {
   paymentId         String
   amount            Decimal  @db.Decimal(10, 2)
   currency          String   @default("INR")
-  status            String   // created, processed, failed
+  status            RefundStatus @default(PENDING)
   reason            String?
   processedAt       DateTime?
   organizationId    String
   organization      Organization @relation(fields: [organizationId], references: [id])
+  payment           Payment? @relation(fields: [paymentId], references: [id])
   metadata          Json     @default("{}")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -979,4 +996,181 @@ model UserRole {
   
   @@unique([userId, roleId])
   @@map("user_roles")
+}
+
+// ===== REAL-TIME FEATURES MODELS =====
+
+model WebSocketConnection {
+  id          String   @id @default(cuid())
+  userId      String?
+  sessionId   String
+  isActive    Boolean  @default(true)
+  connectedAt DateTime @default(now())
+  lastPing    DateTime @default(now())
+  metadata    Json?
+  organizationId String?
+  user        User?    @relation(fields: [userId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  
+  @@map("websocket_connections")
+}
+
+model RealTimeEvent {
+  id          String   @id @default(cuid())
+  type        String
+  data        Json
+  userId      String?
+  organizationId String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  user        User?    @relation(fields: [userId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  
+  @@map("realtime_events")
+}
+
+model PushSubscription {
+  id          String   @id @default(cuid())
+  userId      String
+  organizationId String?
+  endpoint    String
+  p256dh      String
+  auth        String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  
+  @@map("push_subscriptions")
+}
+
+// ===== PAYMENT MODELS =====
+
+model Payment {
+  id              String   @id @default(cuid())
+  razorpayOrderId String
+  razorpayPaymentId String?
+  amount          Decimal
+  currency        String   @default("INR")
+  status          PaymentStatus @default(PENDING)
+  farmerId        String?
+  organizationId  String
+  metadata        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  farmer          FarmerProfile? @relation(fields: [farmerId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  refunds         Refund[]
+  
+  @@map("payments")
+}
+
+
+model Subscription {
+  id              String   @id @default(cuid())
+  farmerId        String
+  organizationId  String
+  planId          String
+  status          SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  farmer          FarmerProfile @relation(fields: [farmerId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  
+  @@map("subscriptions")
+}
+
+// ===== NOTIFICATION MODELS =====
+
+model NotificationPreference {
+  id              String   @id @default(cuid())
+  userId          String
+  organizationId  String?
+  channel         NotificationChannel
+  isEnabled       Boolean  @default(true)
+  frequency       NotificationFrequency @default(IMMEDIATE)
+  quietHoursStart String?
+  quietHoursEnd   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id])
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  
+  @@map("notification_preferences")
+}
+
+model NotificationTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  channel     NotificationChannel
+  subject     String?
+  body        String
+  variables   Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("notification_templates")
+}
+
+model NotificationHistory {
+  id          String   @id @default(cuid())
+  userId      String?
+  channel     NotificationChannel
+  type        String
+  subject     String?
+  body        String
+  status      NotificationStatus @default(PENDING)
+  sentAt      DateTime?
+  errorMessage String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  
+  @@map("notification_history")
+}
+
+// ===== ENUMS =====
+
+enum PaymentStatus {
+  PENDING
+  CAPTURED
+  FAILED
+  CANCELLED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+  UNPAID
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationFrequency {
+  IMMEDIATE
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
 }

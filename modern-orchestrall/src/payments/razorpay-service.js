@@ -1,304 +1,313 @@
-const crypto = require('crypto');
-const axios = require('axios');
+const Razorpay = require('razorpay');
+const { PrismaClient } = require('@prisma/client');
 
 class RazorpayService {
-  constructor() {
-    this.apiKey = process.env.RAZORPAY_API_KEY;
-    this.apiSecret = process.env.RAZORPAY_API_SECRET;
-    this.webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    this.baseUrl = 'https://api.razorpay.com/v1';
+  constructor(prisma) {
+    this.prisma = prisma;
+    this.razorpay = null;
+    this.isInitialized = false;
   }
 
-  verifyWebhookSignature(body, signature) {
+  async initialize() {
+    if (this.isInitialized) return;
+
+    this.razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_key_id',
+      key_secret: process.env.RAZORPAY_KEY_SECRET || 'rzp_test_key_secret'
+    });
+
+    this.isInitialized = true;
+    console.log('✅ Razorpay service initialized');
+  }
+
+  async createOrder(orderData) {
     try {
+      const razorpayOrder = await this.razorpay.orders.create({
+        amount: Math.round(orderData.amount * 100), // Convert to paise
+        currency: orderData.currency || 'INR',
+        receipt: orderData.receipt || `order_${Date.now()}`,
+        notes: orderData.notes || {}
+      });
+
+      // Store in database
+      const payment = await this.prisma.payment.create({
+        data: {
+          razorpayOrderId: razorpayOrder.id,
+          amount: orderData.amount,
+          currency: orderData.currency || 'INR',
+          status: 'PENDING',
+          farmerId: orderData.farmerId,
+          organizationId: orderData.organizationId,
+          metadata: {
+            razorpayOrder,
+            receipt: orderData.receipt,
+            notes: orderData.notes
+          }
+        }
+      });
+
+      console.log(`💳 Payment order created: ${payment.id} (Razorpay: ${razorpayOrder.id})`);
+      return {
+        payment,
+        razorpayOrder
+      };
+    } catch (error) {
+      console.error('Failed to create payment order:', error);
+      throw error;
+    }
+  }
+
+  async verifyPayment(paymentId, razorpayPaymentId, razorpaySignature) {
+    try {
+      const crypto = require('crypto');
       const expectedSignature = crypto
-        .createHmac('sha256', this.webhookSecret)
-        .update(body)
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(`${paymentId}|${razorpayPaymentId}`)
         .digest('hex');
-      
-      return crypto.timingSafeEqual(
-        Buffer.from(signature, 'hex'),
-        Buffer.from(expectedSignature, 'hex')
-      );
+
+      if (expectedSignature !== razorpaySignature) {
+        throw new Error('Invalid payment signature');
+      }
+
+      // Fetch payment details from Razorpay
+      const razorpayPayment = await this.razorpay.payments.fetch(razorpayPaymentId);
+
+      // Update payment in database
+      const payment = await this.prisma.payment.update({
+        where: { id: paymentId },
+        data: {
+          razorpayPaymentId,
+          status: razorpayPayment.status === 'captured' ? 'CAPTURED' : 'FAILED',
+          metadata: {
+            ...payment.metadata,
+            razorpayPayment,
+            verifiedAt: new Date().toISOString()
+          }
+        }
+      });
+
+      console.log(`💳 Payment verified: ${payment.id} (Status: ${payment.status})`);
+      return payment;
     } catch (error) {
-      console.error('Webhook signature verification failed:', error);
-      return false;
+      console.error('Failed to verify payment:', error);
+      throw error;
     }
   }
 
-  async createPaymentIntent(amount, currency = 'INR', metadata = {}) {
+  async processRefund(paymentId, refundData) {
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/orders`,
-        {
-          amount: amount * 100, // Convert to paise
-          currency,
-          receipt: `receipt_${Date.now()}`,
-          notes: metadata
+      const payment = await this.prisma.payment.findUnique({
+        where: { id: paymentId }
+      });
+
+      if (!payment) {
+        throw new Error('Payment not found');
+      }
+
+      if (payment.status !== 'CAPTURED') {
+        throw new Error('Payment must be captured to process refund');
+      }
+
+      // Create refund in Razorpay
+      const razorpayRefund = await this.razorpay.payments.refund(payment.razorpayPaymentId, {
+        amount: Math.round(refundData.amount * 100), // Convert to paise
+        notes: refundData.notes || {}
+      });
+
+      // Store refund in database
+      const refund = await this.prisma.refund.create({
+        data: {
+          paymentId,
+          razorpayRefundId: razorpayRefund.id,
+          amount: refundData.amount,
+          reason: refundData.reason,
+          status: 'PENDING',
+          metadata: {
+            razorpayRefund
+          }
+        }
+      });
+
+      console.log(`💳 Refund created: ${refund.id} (Razorpay: ${razorpayRefund.id})`);
+      return refund;
+    } catch (error) {
+      console.error('Failed to process refund:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentHistory(farmerId, options = {}) {
+    try {
+      const where = {
+        farmerId,
+        ...(options.status && { status: options.status }),
+        ...(options.dateFrom && options.dateTo && {
+          createdAt: {
+            gte: new Date(options.dateFrom),
+            lte: new Date(options.dateTo)
+          }
+        })
+      };
+
+      const payments = await this.prisma.payment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: options.limit || 50,
+        skip: options.offset || 0,
+        include: {
+          refunds: true
+        }
+      });
+
+      return payments;
+    } catch (error) {
+      console.error('Failed to get payment history:', error);
+      throw error;
+    }
+  }
+
+  async getPaymentStats(farmerId, options = {}) {
+    try {
+      const where = {
+        farmerId,
+        ...(options.dateFrom && options.dateTo && {
+          createdAt: {
+            gte: new Date(options.dateFrom),
+            lte: new Date(options.dateTo)
+          }
+        })
+      };
+
+      const stats = await this.prisma.payment.groupBy({
+        by: ['status'],
+        where,
+        _count: {
+          id: true
         },
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
-          },
-          headers: {
-            'Content-Type': 'application/json'
-          }
+        _sum: {
+          amount: true
         }
-      );
+      });
 
-      return {
-        success: true,
-        orderId: response.data.id,
-        amount: response.data.amount,
-        currency: response.data.currency,
-        status: response.data.status,
-        receipt: response.data.receipt
-      };
+      return stats.reduce((acc, stat) => {
+        acc[stat.status.toLowerCase()] = {
+          count: stat._count.id,
+          amount: stat._sum.amount || 0
+        };
+        return acc;
+      }, {});
     } catch (error) {
-      console.error('Payment intent creation failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
+      console.error('Failed to get payment stats:', error);
+      throw error;
     }
   }
 
-  async capturePayment(paymentId, amount) {
+  async handleWebhook(webhookData) {
     try {
-      const response = await axios.post(
-        `${this.baseUrl}/payments/${paymentId}/capture`,
-        {
-          amount: amount * 100 // Convert to paise
-        },
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
-          },
-          headers: {
-            'Content-Type': 'application/json'
+      const { event, payload } = webhookData;
+
+      switch (event) {
+        case 'payment.captured':
+          await this.handlePaymentCaptured(payload);
+          break;
+        case 'payment.failed':
+          await this.handlePaymentFailed(payload);
+          break;
+        case 'refund.created':
+          await this.handleRefundCreated(payload);
+          break;
+        case 'refund.processed':
+          await this.handleRefundProcessed(payload);
+          break;
+        default:
+          console.log(`Unhandled webhook event: ${event}`);
+      }
+
+      console.log(`🔔 Webhook processed: ${event}`);
+    } catch (error) {
+      console.error('Failed to handle webhook:', error);
+      throw error;
+    }
+  }
+
+  async handlePaymentCaptured(payload) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { razorpayPaymentId: payload.payment.entity.id }
+    });
+
+    if (payment) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'CAPTURED',
+          metadata: {
+            ...payment.metadata,
+            webhookData: payload,
+            capturedAt: new Date().toISOString()
           }
         }
-      );
-
-      return {
-        success: true,
-        paymentId: response.data.id,
-        status: response.data.status,
-        amount: response.data.amount,
-        captured: response.data.captured
-      };
-    } catch (error) {
-      console.error('Payment capture failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
+      });
     }
   }
 
-  async createRefund(paymentId, amount, reason = 'requested_by_customer') {
-    try {
-      const refundData = {
-        amount: amount * 100, // Convert to paise
-        notes: {
-          reason,
-          timestamp: new Date().toISOString()
-        }
-      };
+  async handlePaymentFailed(payload) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { razorpayPaymentId: payload.payment.entity.id }
+    });
 
-      const response = await axios.post(
-        `${this.baseUrl}/payments/${paymentId}/refund`,
-        refundData,
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
-          },
-          headers: {
-            'Content-Type': 'application/json'
+    if (payment) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'FAILED',
+          metadata: {
+            ...payment.metadata,
+            webhookData: payload,
+            failedAt: new Date().toISOString()
           }
         }
-      );
-
-      return {
-        success: true,
-        refundId: response.data.id,
-        paymentId: response.data.payment_id,
-        amount: response.data.amount,
-        status: response.data.status,
-        notes: response.data.notes
-      };
-    } catch (error) {
-      console.error('Refund creation failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
+      });
     }
   }
 
-  async getPaymentDetails(paymentId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/payments/${paymentId}`,
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
+  async handleRefundCreated(payload) {
+    const refund = await this.prisma.refund.findFirst({
+      where: { razorpayRefundId: payload.refund.entity.id }
+    });
+
+    if (refund) {
+      await this.prisma.refund.update({
+        where: { id: refund.id },
+        data: {
+          status: 'PROCESSED',
+          metadata: {
+            ...refund.metadata,
+            webhookData: payload,
+            processedAt: new Date().toISOString()
           }
         }
-      );
-
-      return {
-        success: true,
-        payment: {
-          id: response.data.id,
-          amount: response.data.amount,
-          currency: response.data.currency,
-          status: response.data.status,
-          method: response.data.method,
-          description: response.data.description,
-          email: response.data.email,
-          contact: response.data.contact,
-          notes: response.data.notes,
-          created_at: response.data.created_at
-        }
-      };
-    } catch (error) {
-      console.error('Payment details fetch failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
+      });
     }
   }
 
-  async getRefunds(paymentId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/payments/${paymentId}/refunds`,
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
+  async handleRefundProcessed(payload) {
+    const refund = await this.prisma.refund.findFirst({
+      where: { razorpayRefundId: payload.refund.entity.id }
+    });
+
+    if (refund) {
+      await this.prisma.refund.update({
+        where: { id: refund.id },
+        data: {
+          status: 'PROCESSED',
+          metadata: {
+            ...refund.metadata,
+            webhookData: payload,
+            processedAt: new Date().toISOString()
           }
         }
-      );
-
-      return {
-        success: true,
-        refunds: response.data.items.map(refund => ({
-          id: refund.id,
-          amount: refund.amount,
-          status: refund.status,
-          notes: refund.notes,
-          created_at: refund.created_at
-        }))
-      };
-    } catch (error) {
-      console.error('Refunds fetch failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
+      });
     }
-  }
-
-  async getReconciliationData(startDate, endDate) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/payments`,
-        {
-          auth: {
-            username: this.apiKey,
-            password: this.apiSecret
-          },
-          params: {
-            'from': Math.floor(new Date(startDate).getTime() / 1000),
-            'to': Math.floor(new Date(endDate).getTime() / 1000),
-            'count': 100
-          }
-        }
-      );
-
-      const payments = response.data.items;
-      const reconciliation = {
-        totalPayments: payments.length,
-        totalAmount: payments.reduce((sum, p) => sum + p.amount, 0),
-        successfulPayments: payments.filter(p => p.status === 'captured').length,
-        failedPayments: payments.filter(p => p.status === 'failed').length,
-        pendingPayments: payments.filter(p => p.status === 'authorized').length,
-        payments: payments.map(payment => ({
-          id: payment.id,
-          amount: payment.amount,
-          currency: payment.currency,
-          status: payment.status,
-          method: payment.method,
-          created_at: payment.created_at,
-          email: payment.email,
-          contact: payment.contact
-        }))
-      };
-
-      return {
-        success: true,
-        reconciliation
-      };
-    } catch (error) {
-      console.error('Reconciliation data fetch failed:', error);
-      return {
-        success: false,
-        error: error.response?.data?.error?.description || error.message
-      };
-    }
-  }
-
-  async processWebhookEvent(eventType, eventData) {
-    console.log(`Processing Razorpay webhook: ${eventType}`, eventData);
-
-    switch (eventType) {
-      case 'payment.captured':
-        return await this.handlePaymentCaptured(eventData);
-      
-      case 'payment.failed':
-        return await this.handlePaymentFailed(eventData);
-      
-      case 'refund.created':
-        return await this.handleRefundCreated(eventData);
-      
-      case 'refund.processed':
-        return await this.handleRefundProcessed(eventData);
-      
-      default:
-        console.log(`Unhandled webhook event: ${eventType}`);
-        return { success: true, message: 'Event logged' };
-    }
-  }
-
-  async handlePaymentCaptured(eventData) {
-    // Update order status, send confirmation emails, etc.
-    console.log('Payment captured:', eventData.payment.entity.id);
-    return { success: true, message: 'Payment captured processed' };
-  }
-
-  async handlePaymentFailed(eventData) {
-    // Update order status, send failure notifications, etc.
-    console.log('Payment failed:', eventData.payment.entity.id);
-    return { success: true, message: 'Payment failure processed' };
-  }
-
-  async handleRefundCreated(eventData) {
-    // Update refund status, send notifications, etc.
-    console.log('Refund created:', eventData.refund.entity.id);
-    return { success: true, message: 'Refund creation processed' };
-  }
-
-  async handleRefundProcessed(eventData) {
-    // Update refund status, send completion notifications, etc.
-    console.log('Refund processed:', eventData.refund.entity.id);
-    return { success: true, message: 'Refund processing completed' };
   }
 }
 

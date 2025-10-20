@@ -43,6 +43,13 @@ const MarketIntelligenceService = require('./agricultural/market-intelligence-se
 const AgriculturalFinancialService = require('./agricultural/agricultural-financial-service');
 const WeatherIntegrationService = require('./agricultural/weather-integration-service');
 
+// Real-time Services
+const WebSocketServer = require('./realtime/websocket-server');
+const SSEServer = require('./realtime/sse-server');
+const PushNotificationService = require('./notifications/push-service');
+const SMSService = require('./notifications/sms-service');
+const EmailService = require('./notifications/email-service');
+
 class ZeroConfigServer {
   constructor() {
     this.app = null;
@@ -80,6 +87,13 @@ class ZeroConfigServer {
     this.marketIntelligence = new MarketIntelligenceService(this.prisma);
     this.agriculturalFinance = new AgriculturalFinancialService(this.prisma);
     this.weatherIntegration = new WeatherIntegrationService(this.prisma);
+    
+    // Initialize Real-time Services
+    this.webSocketServer = null;
+    this.sseServer = new SSEServer(this.prisma);
+    this.pushService = new PushNotificationService(this.prisma);
+    this.smsService = new SMSService(this.prisma);
+    this.emailService = new EmailService(this.prisma);
   }
 
   async initialize() {
@@ -114,6 +128,9 @@ class ZeroConfigServer {
       
       // Initialize metrics
       await this.initializeMetrics();
+
+      // Initialize real-time services
+      await this.initializeRealTimeServices();
 
       // Register routes
       await this.registerRoutes();
@@ -246,6 +263,33 @@ class ZeroConfigServer {
         // ignore metrics errors
       }
     });
+  }
+
+  async initializeRealTimeServices() {
+    console.log('🔌 Initializing real-time services...');
+    
+    try {
+      // Initialize WebSocket server
+      this.webSocketServer = new WebSocketServer(this.app.server, this.prisma);
+      this.webSocketServer.initialize();
+      this.webSocketServer.startHealthChecks();
+      
+      // Initialize SSE server
+      this.sseServer.initialize(this.app);
+      
+      // Initialize notification services
+      await this.pushService.initialize();
+      await this.smsService.initialize();
+      await this.emailService.initialize();
+      
+      // Initialize Razorpay service
+      await this.razorpay.initialize();
+      
+      console.log('✅ Real-time services initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize real-time services:', error);
+      throw error;
+    }
   }
 
   async initializeDatabase() {
@@ -1742,6 +1786,9 @@ class ZeroConfigServer {
     // Agricultural APIs
     this.registerAgriculturalRoutes();
 
+    // Real-time APIs
+    this.registerRealtimeRoutes();
+
     // Multi-tenancy APIs
     this.app.get('/api/multitenancy/tiers', async (request, reply) => {
       try {
@@ -2221,6 +2268,207 @@ class ZeroConfigServer {
     });
 
     console.log('✅ Agricultural routes registered with authentication and validation');
+  }
+
+  registerRealtimeRoutes() {
+    // WebSocket connection endpoint (handled by WebSocketServer)
+    // SSE endpoint (handled by SSEServer)
+    
+    // Push Notification Routes
+    this.app.post('/api/notifications/push/subscribe', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.pushService.subscribeUser(request.user.userId, request.body);
+          reply.send(this.errorHandler.successResponse(result, 'Push subscription created'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/notifications/push/unsubscribe', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          await this.pushService.unsubscribeUser(request.user.userId, request.body.endpoint);
+          reply.send(this.errorHandler.successResponse(null, 'Push subscription removed'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/notifications/push/vapid-key', async (request, reply) => {
+      try {
+        const publicKey = await this.pushService.getVapidPublicKey();
+        reply.send(this.errorHandler.successResponse({ publicKey }));
+      } catch (error) {
+        throw error;
+      }
+    });
+
+    // SMS Routes
+    this.app.post('/api/notifications/sms/send', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.smsService.sendSMS(request.body.to, request.body.message, {
+            userId: request.user.userId,
+            type: request.body.type || 'general',
+            subject: request.body.subject
+          });
+          reply.send(this.errorHandler.successResponse(result, 'SMS sent successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/notifications/sms/bulk', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.smsService.sendToFarmers(request.body.farmerIds, request.body.message, {
+            userId: request.user.userId,
+            type: request.body.type || 'general',
+            subject: request.body.subject
+          });
+          reply.send(this.errorHandler.successResponse(result, 'Bulk SMS sent successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Email Routes
+    this.app.post('/api/notifications/email/send', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.emailService.sendEmail(request.body.to, request.body.subject, request.body.html, {
+            userId: request.user.userId,
+            type: request.body.type || 'general'
+          });
+          reply.send(this.errorHandler.successResponse(result, 'Email sent successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/notifications/email/bulk', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.emailService.sendToFarmers(request.body.farmerIds, request.body.subject, request.body.html, {
+            userId: request.user.userId,
+            type: request.body.type || 'general'
+          });
+          reply.send(this.errorHandler.successResponse(result, 'Bulk email sent successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Payment Routes
+    this.app.post('/api/payments/create', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.razorpay.createOrder({
+            ...request.body,
+            farmerId: request.user.userId,
+            organizationId: request.user.organizationId
+          });
+          reply.send(this.errorHandler.successResponse(result, 'Payment order created'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/payments/verify', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.razorpay.verifyPayment(
+            request.body.paymentId,
+            request.body.razorpayPaymentId,
+            request.body.razorpaySignature
+          );
+          reply.send(this.errorHandler.successResponse(result, 'Payment verified'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/payments/refund', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.razorpay.processRefund(request.body.paymentId, request.body.refundData);
+          reply.send(this.errorHandler.successResponse(result, 'Refund processed'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/payments/history', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.razorpay.getPaymentHistory(request.user.userId, request.query);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Razorpay Webhook
+    this.app.post('/api/payments/webhook', async (request, reply) => {
+      try {
+        await this.razorpay.handleWebhook(request.body);
+        reply.send({ success: true });
+      } catch (error) {
+        this.app.log.error('Webhook error:', error);
+        reply.code(400).send({ error: error.message });
+      }
+    });
+
+    console.log('✅ Real-time routes registered with authentication and validation');
   }
 
     // Farmer Management APIs
