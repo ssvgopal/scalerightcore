@@ -15,6 +15,8 @@ const NotificationService = require('./notifications/service');
 const { runBackup } = require('./backup/service');
 const { restoreFromSnapshot } = require('./backup/restore');
 const { getLang, getDict } = require('./i18n/index');
+const { loadClientBundle } = require('./bundles/loader');
+const { diffAndApply } = require('./bundles/apply');
 
 class ZeroConfigServer {
   constructor() {
@@ -561,6 +563,34 @@ class ZeroConfigServer {
         reply.send({ success: true, summary: res });
       } catch (err) {
         reply.code(500).send({ success: false, error: err.message });
+      }
+    });
+
+    // Service Bundles APIs
+    this.app.post('/api/admin/bundles/apply', async (request, reply) => {
+      const client = request.query && request.query.client;
+      const dry = (request.query && String(request.query.dryRun).toLowerCase() === 'true');
+      if (!client) return reply.code(400).send({ success: false, error: 'client is required' });
+      try {
+        const bundle = loadClientBundle(path.join(__dirname, '..'), client);
+        const res = await diffAndApply({ prisma: this.prisma, clientId: client, bundle, dryRun: dry });
+        // emit events
+        try { this.eventBus.emit('bundle:apply', { client, dryRun: dry, status: 'ok' }); } catch(_){}
+        reply.send({ success: true, client, ...res });
+      } catch (err) {
+        try { this.eventBus.emit('bundle:apply', { client, dryRun: dry, status: 'error', error: err.message }); } catch(_){}
+        reply.code(500).send({ success: false, error: err.message });
+      }
+    });
+
+    this.app.get('/api/admin/bundles/status', async (request, reply) => {
+      const client = request.query && request.query.client;
+      if (!client) return reply.code(400).send({ success: false, error: 'client is required' });
+      try {
+        const bundle = loadClientBundle(path.join(__dirname, '..'), client);
+        reply.send({ success: true, client, bundle: { id: bundle.id, version: bundle.version, plugins: bundle.plugins.map(p=>p.id) } });
+      } catch (err) {
+        reply.code(404).send({ success: false, error: err.message });
       }
     });
 
