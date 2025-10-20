@@ -28,6 +28,7 @@ const ElasticsearchService = require('./search/elasticsearch-service');
 const SearchIndexingService = require('./search/indexing-service');
 const SarvamVoiceService = require('./voice/sarvam-service');
 const TenantObservabilityService = require('./observability/tenant-service');
+const RBACService = require('./security/rbac-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -52,6 +53,7 @@ class ZeroConfigServer {
     this.elasticsearch = new ElasticsearchService();
     this.sarvamVoice = new SarvamVoiceService();
     this.tenantObservability = new TenantObservabilityService(this.prisma);
+    this.rbac = new RBACService(this.prisma);
   }
 
   async initialize() {
@@ -1485,6 +1487,228 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Audit trails fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Security APIs (RBAC)
+    this.app.post('/api/security/roles', async (request, reply) => {
+      try {
+        const roleData = request.body;
+        const result = await this.rbac.createRole(roleData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Role creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/roles/:roleId/assign', async (request, reply) => {
+      try {
+        const { roleId } = request.params;
+        const { userId, organizationId } = request.body;
+        
+        if (!userId || !organizationId) {
+          return reply.code(400).send({ 
+            error: 'userId and organizationId are required' 
+          });
+        }
+
+        const result = await this.rbac.assignRoleToUser(userId, roleId, organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Role assignment error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/security/users/:userId/roles', async (request, reply) => {
+      try {
+        const { userId } = request.params;
+        const { organizationId } = request.query;
+        
+        if (!organizationId) {
+          return reply.code(400).send({ 
+            error: 'organizationId is required' 
+          });
+        }
+
+        const result = await this.rbac.getUserRoles(userId, organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('User roles fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/permissions/check', async (request, reply) => {
+      try {
+        const { userId, organizationId, permission, resource } = request.body;
+        
+        if (!userId || !organizationId || !permission) {
+          return reply.code(400).send({ 
+            error: 'userId, organizationId, and permission are required' 
+          });
+        }
+
+        const result = await this.rbac.checkPermission(userId, organizationId, permission, resource);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Permission check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/api-keys', async (request, reply) => {
+      try {
+        const apiKeyData = request.body;
+        const result = await this.rbac.createAPIKey(apiKeyData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('API key creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/api-keys/validate', async (request, reply) => {
+      try {
+        const { key } = request.body;
+        
+        if (!key) {
+          return reply.code(400).send({ 
+            error: 'API key is required' 
+          });
+        }
+
+        const result = await this.rbac.validateAPIKey(key);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('API key validation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/api-keys/:apiKeyId/rate-limit', async (request, reply) => {
+      try {
+        const { apiKeyId } = request.params;
+        const { endpoint } = request.body;
+        
+        if (!endpoint) {
+          return reply.code(400).send({ 
+            error: 'endpoint is required' 
+          });
+        }
+
+        const result = await this.rbac.checkRateLimit(apiKeyId, endpoint);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Rate limit check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/security/api-keys/:apiKeyId', async (request, reply) => {
+      try {
+        const { apiKeyId } = request.params;
+        const result = await this.rbac.revokeAPIKey(apiKeyId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('API key revocation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/security/api-keys', async (request, reply) => {
+      try {
+        const { organizationId } = request.query;
+        
+        if (!organizationId) {
+          return reply.code(400).send({ 
+            error: 'organizationId is required' 
+          });
+        }
+
+        const result = await this.rbac.getAPIKeys(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('API keys fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/scopes', async (request, reply) => {
+      try {
+        const scopeData = request.body;
+        const result = await this.rbac.createScope(scopeData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Scope creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/scopes/:scopeId/assign', async (request, reply) => {
+      try {
+        const { scopeId } = request.params;
+        const { roleId } = request.body;
+        
+        if (!roleId) {
+          return reply.code(400).send({ 
+            error: 'roleId is required' 
+          });
+        }
+
+        const result = await this.rbac.assignScopeToRole(roleId, scopeId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Scope assignment error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/security/roles/:roleId/scopes', async (request, reply) => {
+      try {
+        const { roleId } = request.params;
+        const result = await this.rbac.getRoleScopes(roleId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Role scopes fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/tokens', async (request, reply) => {
+      try {
+        const { userId, organizationId, permissions = [] } = request.body;
+        
+        if (!userId || !organizationId) {
+          return reply.code(400).send({ 
+            error: 'userId and organizationId are required' 
+          });
+        }
+
+        const result = await this.rbac.generateJWTToken(userId, organizationId, permissions);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('JWT token generation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/security/tokens/validate', async (request, reply) => {
+      try {
+        const { token } = request.body;
+        
+        if (!token) {
+          return reply.code(400).send({ 
+            error: 'token is required' 
+          });
+        }
+
+        const result = await this.rbac.validateJWTToken(token);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('JWT token validation error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
