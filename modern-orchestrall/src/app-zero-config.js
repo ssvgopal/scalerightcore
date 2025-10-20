@@ -24,6 +24,8 @@ const ZohoCRMService = require('./crm/zoho-service');
 const CRMSyncService = require('./crm/sync-service');
 const InventoryTransferService = require('./inventory/transfer-service');
 const ReorderRulesEngine = require('./inventory/reorder-engine');
+const ElasticsearchService = require('./search/elasticsearch-service');
+const SearchIndexingService = require('./search/indexing-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -45,6 +47,7 @@ class ZeroConfigServer {
     this.zoho = new ZohoCRMService();
     this.inventoryTransfer = new InventoryTransferService(this.prisma);
     this.reorderEngine = new ReorderRulesEngine(this.prisma);
+    this.elasticsearch = new ElasticsearchService();
   }
 
   async initialize() {
@@ -1103,6 +1106,165 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Audit logs fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Search APIs (Elasticsearch)
+    this.app.get('/api/search/health', async (request, reply) => {
+      try {
+        const result = await this.elasticsearch.getHealth();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search health check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/indices', async (request, reply) => {
+      try {
+        const result = await this.elasticsearch.getIndices();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search indices error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/search/indexing/initialize', async (request, reply) => {
+      try {
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.initializeIndexes();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search indexing initialization error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/search/indexing/start', async (request, reply) => {
+      try {
+        const { entityType, organizationId = 'demo-org', options = {} } = request.body;
+        
+        if (!entityType) {
+          return reply.code(400).send({ 
+            error: 'entityType is required' 
+          });
+        }
+
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.startIndexingJob(entityType, organizationId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search indexing start error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/indexing/jobs/:jobId', async (request, reply) => {
+      try {
+        const { jobId } = request.params;
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.getIndexingJobStatus(jobId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search indexing job status error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/indexing/jobs', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org' } = request.query;
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.getAllIndexingJobs(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search indexing jobs list error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/products', async (request, reply) => {
+      try {
+        const { q, organizationId = 'demo-org', ...options } = request.query;
+        
+        if (!q) {
+          return reply.code(400).send({ 
+            error: 'Query parameter q is required' 
+          });
+        }
+
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.searchProducts(q, organizationId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Product search error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/users', async (request, reply) => {
+      try {
+        const { q, organizationId = 'demo-org', ...options } = request.query;
+        
+        if (!q) {
+          return reply.code(400).send({ 
+            error: 'Query parameter q is required' 
+          });
+        }
+
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.searchUsers(q, organizationId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('User search error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/search/orders', async (request, reply) => {
+      try {
+        const { q, organizationId = 'demo-org', ...options } = request.query;
+        
+        if (!q) {
+          return reply.code(400).send({ 
+            error: 'Query parameter q is required' 
+          });
+        }
+
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.searchOrders(q, organizationId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Order search error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.put('/api/search/:entityType/:id', async (request, reply) => {
+      try {
+        const { entityType, id } = request.params;
+        const document = request.body;
+        
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.updateDocument(entityType, id, document);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search document update error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/search/:entityType/:id', async (request, reply) => {
+      try {
+        const { entityType, id } = request.params;
+        
+        const searchIndexing = new SearchIndexingService(this.prisma);
+        const result = await searchIndexing.deleteDocument(entityType, id);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Search document deletion error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
