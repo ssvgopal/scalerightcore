@@ -425,15 +425,37 @@ class CropMonitoringService {
   }
 
   async getHistoricalYieldData(cropType, location) {
-    // Mock historical data - in production, this would come from a database
-    const mockData = {
-      'rice': { averageYield: 3000, dataPoints: 150 },
-      'wheat': { averageYield: 2500, dataPoints: 120 },
-      'cotton': { averageYield: 800, dataPoints: 80 },
-      'sugarcane': { averageYield: 80000, dataPoints: 60 }
-    };
+    try {
+      // Query historical yield data from database
+      const historicalRecords = await this.prisma.yieldPrediction.findMany({
+        where: {
+          cropType: cropType.toLowerCase(),
+          location: {
+            contains: location,
+            mode: 'insensitive'
+          }
+        },
+        orderBy: { predictedAt: 'desc' },
+        take: 100 // Get last 100 records for analysis
+      });
 
-    return mockData[cropType.toLowerCase()] || { averageYield: 2000, dataPoints: 50 };
+      if (historicalRecords.length === 0) {
+        // If no historical data, return default values
+        return { averageYield: 2000, dataPoints: 0 };
+      }
+
+      // Calculate average yield from historical data
+      const totalYield = historicalRecords.reduce((sum, record) => sum + record.predictedYield, 0);
+      const averageYield = Math.round(totalYield / historicalRecords.length);
+
+      return {
+        averageYield,
+        dataPoints: historicalRecords.length
+      };
+    } catch (error) {
+      console.error('Historical yield data fetch failed:', error);
+      return { averageYield: 2000, dataPoints: 0 };
+    }
   }
 
   calculateWeatherYieldFactor(weatherData) {

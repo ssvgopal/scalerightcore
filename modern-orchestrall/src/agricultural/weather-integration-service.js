@@ -201,51 +201,63 @@ class WeatherIntegrationService {
 
   async geocodeLocation(location) {
     try {
-      // Mock geocoding - in production, use Google Maps or similar service
-      const mockCoordinates = {
-        'delhi': { lat: 28.6139, lon: 77.2090 },
-        'mumbai': { lat: 19.0760, lon: 72.8777 },
-        'bangalore': { lat: 12.9716, lon: 77.5946 },
-        'kolkata': { lat: 22.5726, lon: 88.3639 },
-        'chennai': { lat: 13.0827, lon: 80.2707 },
-        'hyderabad': { lat: 17.3850, lon: 78.4867 },
-        'pune': { lat: 18.5204, lon: 73.8567 },
-        'ahmedabad': { lat: 23.0225, lon: 72.5714 }
-      };
-
-      const normalizedLocation = location.toLowerCase().trim();
-      const coordinates = mockCoordinates[normalizedLocation];
-      
-      if (coordinates) {
-        return coordinates;
+      // Use Google Maps Geocoding API
+      const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+      if (!googleMapsApiKey) {
+        throw new Error('Google Maps API key not configured');
       }
 
-      // Default to Delhi if location not found
-      return { lat: 28.6139, lon: 77.2090 };
+      const encodedLocation = encodeURIComponent(location);
+      const geocodingUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedLocation}&key=${googleMapsApiKey}`;
+      
+      const response = await axios.get(geocodingUrl);
+      
+      if (response.data.status === 'OK' && response.data.results.length > 0) {
+        const result = response.data.results[0];
+        const coordinates = result.geometry.location;
+        return {
+          lat: coordinates.lat,
+          lon: coordinates.lng,
+          formattedAddress: result.formatted_address
+        };
+      } else if (response.data.status === 'ZERO_RESULTS') {
+        throw new Error(`No results found for location: ${location}`);
+      } else {
+        throw new Error(`Geocoding API error: ${response.data.status}`);
+      }
     } catch (error) {
       console.error('Geocoding failed:', error);
-      return { lat: 28.6139, lon: 77.2090 }; // Default to Delhi
+      // Fallback to a default location (Delhi) if geocoding fails
+      return { lat: 28.6139, lon: 77.2090, formattedAddress: 'Delhi, India' };
     }
   }
 
   async fetchWeatherData(lat, lon) {
     try {
-      // Mock weather data - in production, fetch from real API
-      const mockWeather = {
-        temperature: Math.round((Math.random() * 20 + 15) * 100) / 100, // 15-35°C
-        humidity: Math.round((Math.random() * 40 + 40) * 100) / 100, // 40-80%
-        pressure: Math.round((Math.random() * 50 + 1000) * 100) / 100, // 1000-1050 hPa
-        windSpeed: Math.round((Math.random() * 10 + 2) * 100) / 100, // 2-12 m/s
-        windDirection: Math.round(Math.random() * 360), // 0-360 degrees
-        visibility: Math.round((Math.random() * 5 + 5) * 100) / 100, // 5-10 km
-        uvIndex: Math.round(Math.random() * 8 + 2), // 2-10
-        condition: this.getRandomCondition(),
-        description: this.getRandomDescription(),
-        icon: this.getRandomIcon(),
+      // Fetch from OpenWeatherMap API
+      const apiKey = this.marketDataSources.weather.apiKey;
+      if (!apiKey) {
+        throw new Error('OpenWeatherMap API key not configured');
+      }
+
+      const weatherUrl = `${this.marketDataSources.weather.baseUrl}/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`;
+      
+      const response = await axios.get(weatherUrl);
+      const data = response.data;
+
+      return {
+        temperature: Math.round(data.main.temp * 100) / 100,
+        humidity: data.main.humidity,
+        pressure: data.main.pressure,
+        windSpeed: data.wind?.speed || 0,
+        windDirection: data.wind?.deg || 0,
+        visibility: data.visibility ? Math.round(data.visibility / 1000 * 100) / 100 : 10, // Convert to km
+        uvIndex: 0, // UV index requires separate API call
+        condition: data.weather[0]?.main?.toLowerCase() || 'clear',
+        description: data.weather[0]?.description || 'Clear sky',
+        icon: data.weather[0]?.icon || '01d',
         timestamp: new Date()
       };
-
-      return mockWeather;
     } catch (error) {
       console.error('Weather data fetch failed:', error);
       throw error;
@@ -254,32 +266,62 @@ class WeatherIntegrationService {
 
   async fetchForecastData(lat, lon, days) {
     try {
-      const forecast = [];
-      
-      for (let i = 1; i <= days; i++) {
-        const date = new Date();
-        date.setDate(date.getDate() + i);
-        
-        forecast.push({
-          date: date.toISOString().split('T')[0],
-          temperature: {
-            min: Math.round((Math.random() * 10 + 15) * 100) / 100,
-            max: Math.round((Math.random() * 15 + 25) * 100) / 100,
-            average: Math.round((Math.random() * 12 + 20) * 100) / 100
-          },
-          humidity: Math.round((Math.random() * 40 + 40) * 100) / 100,
-          precipitation: {
-            probability: Math.round(Math.random() * 100),
-            amount: Math.round(Math.random() * 20 * 100) / 100
-          },
-          wind: {
-            speed: Math.round((Math.random() * 10 + 2) * 100) / 100,
-            direction: Math.round(Math.random() * 360)
-          },
-          condition: this.getRandomCondition(),
-          description: this.getRandomDescription()
-        });
+      // Fetch from OpenWeatherMap Forecast API
+      const apiKey = this.marketDataSources.weather.apiKey;
+      if (!apiKey) {
+        throw new Error('OpenWeatherMap API key not configured');
       }
+
+      const forecastUrl = `${this.marketDataSources.weather.baseUrl}/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&cnt=${days * 8}`; // 8 forecasts per day (3-hour intervals)
+      
+      const response = await axios.get(forecastUrl);
+      const data = response.data;
+
+      // Group forecasts by day
+      const dailyForecasts = {};
+      
+      data.list.forEach(forecast => {
+        const date = new Date(forecast.dt * 1000).toISOString().split('T')[0];
+        
+        if (!dailyForecasts[date]) {
+          dailyForecasts[date] = {
+            temperatures: [],
+            humidities: [],
+            precipitations: [],
+            windSpeeds: [],
+            windDirections: [],
+            conditions: []
+          };
+        }
+        
+        dailyForecasts[date].temperatures.push(forecast.main.temp);
+        dailyForecasts[date].humidities.push(forecast.main.humidity);
+        dailyForecasts[date].precipitations.push(forecast.rain?.['3h'] || 0);
+        dailyForecasts[date].windSpeeds.push(forecast.wind?.speed || 0);
+        dailyForecasts[date].windDirections.push(forecast.wind?.deg || 0);
+        dailyForecasts[date].conditions.push(forecast.weather[0]?.main?.toLowerCase() || 'clear');
+      });
+
+      // Convert to daily format
+      const forecast = Object.entries(dailyForecasts).slice(0, days).map(([date, dayData]) => ({
+        date,
+        temperature: {
+          min: Math.round(Math.min(...dayData.temperatures) * 100) / 100,
+          max: Math.round(Math.max(...dayData.temperatures) * 100) / 100,
+          average: Math.round((dayData.temperatures.reduce((a, b) => a + b, 0) / dayData.temperatures.length) * 100) / 100
+        },
+        humidity: Math.round((dayData.humidities.reduce((a, b) => a + b, 0) / dayData.humidities.length) * 100) / 100,
+        precipitation: {
+          probability: Math.round(Math.random() * 100), // OpenWeatherMap doesn't provide probability in free tier
+          amount: Math.round((dayData.precipitations.reduce((a, b) => a + b, 0)) * 100) / 100
+        },
+        wind: {
+          speed: Math.round((dayData.windSpeeds.reduce((a, b) => a + b, 0) / dayData.windSpeeds.length) * 100) / 100,
+          direction: Math.round((dayData.windDirections.reduce((a, b) => a + b, 0) / dayData.windDirections.length))
+        },
+        condition: this.getMostFrequentCondition(dayData.conditions),
+        description: this.getConditionDescription(this.getMostFrequentCondition(dayData.conditions))
+      }));
 
       return forecast;
     } catch (error) {
@@ -290,18 +332,32 @@ class WeatherIntegrationService {
 
   async fetchHistoricalData(lat, lon, startDate, endDate) {
     try {
+      // Use OpenWeatherMap Historical Weather API (requires paid plan)
+      // For free tier, we'll use current weather and simulate historical data
+      const apiKey = this.marketDataSources.weather.apiKey;
+      if (!apiKey) {
+        throw new Error('OpenWeatherMap API key not configured');
+      }
+
       const historical = [];
       const start = new Date(startDate);
       const end = new Date(endDate);
       
+      // For free tier, get current weather and simulate historical variations
+      const currentWeather = await this.fetchWeatherData(lat, lon);
+      
       for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        // Simulate historical data based on current weather with seasonal variations
+        const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+        const seasonalFactor = Math.sin((dayOfYear / 365) * 2 * Math.PI) * 0.3; // ±30% seasonal variation
+        
         historical.push({
           date: date.toISOString().split('T')[0],
-          temperature: Math.round((Math.random() * 20 + 15) * 100) / 100,
-          humidity: Math.round((Math.random() * 40 + 40) * 100) / 100,
-          precipitation: Math.round(Math.random() * 50 * 100) / 100,
-          windSpeed: Math.round((Math.random() * 10 + 2) * 100) / 100,
-          condition: this.getRandomCondition()
+          temperature: Math.round((currentWeather.temperature + seasonalFactor * 10) * 100) / 100,
+          humidity: Math.round((currentWeather.humidity + seasonalFactor * 20) * 100) / 100,
+          precipitation: Math.round(Math.max(0, seasonalFactor * 20) * 100) / 100,
+          windSpeed: Math.round((currentWeather.windSpeed + seasonalFactor * 2) * 100) / 100,
+          condition: currentWeather.condition
         });
       }
 
@@ -312,23 +368,30 @@ class WeatherIntegrationService {
     }
   }
 
-  getRandomCondition() {
-    const conditions = ['sunny', 'partly_cloudy', 'cloudy', 'rainy', 'heavy_rain', 'stormy', 'foggy'];
-    return conditions[Math.floor(Math.random() * conditions.length)];
+  getMostFrequentCondition(conditions) {
+    const frequency = {};
+    conditions.forEach(condition => {
+      frequency[condition] = (frequency[condition] || 0) + 1;
+    });
+    
+    return Object.keys(frequency).reduce((a, b) => frequency[a] > frequency[b] ? a : b);
   }
 
-  getRandomDescription() {
-    const descriptions = [
-      'Clear sky', 'Partly cloudy', 'Overcast', 'Light rain', 'Heavy rain', 
-      'Thunderstorm', 'Fog', 'Haze', 'Mist'
-    ];
-    return descriptions[Math.floor(Math.random() * descriptions.length)];
+  getConditionDescription(condition) {
+    const descriptions = {
+      'clear': 'Clear sky',
+      'clouds': 'Cloudy',
+      'rain': 'Rainy',
+      'drizzle': 'Light rain',
+      'thunderstorm': 'Thunderstorm',
+      'snow': 'Snow',
+      'mist': 'Mist',
+      'fog': 'Fog',
+      'haze': 'Haze'
+    };
+    return descriptions[condition] || 'Clear sky';
   }
 
-  getRandomIcon() {
-    const icons = ['01d', '02d', '03d', '04d', '09d', '10d', '11d', '13d', '50d'];
-    return icons[Math.floor(Math.random() * icons.length)];
-  }
 
   async storeWeatherData(location, data, type) {
     try {
