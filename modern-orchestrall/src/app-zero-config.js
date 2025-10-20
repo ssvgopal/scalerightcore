@@ -18,6 +18,8 @@ const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
 const PluginCatalogService = require('./plugins/service');
+const RazorpayService = require('./payments/razorpay-service');
+const PaymentReconciliationService = require('./payments/reconciliation-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -35,6 +37,7 @@ class ZeroConfigServer {
     };
     this.notifications = new NotificationService();
     this.pluginCatalog = new PluginCatalogService();
+    this.razorpay = new RazorpayService();
   }
 
   async initialize() {
@@ -676,6 +679,153 @@ class ZeroConfigServer {
         return reply.send(metrics);
       } catch (error) {
         this.app.log.error('Plugin metrics error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Payment APIs (Razorpay)
+    this.app.post('/api/payments/create-intent', async (request, reply) => {
+      try {
+        const { amount, currency = 'INR', metadata = {} } = request.body;
+        
+        if (!amount || amount <= 0) {
+          return reply.code(400).send({ 
+            error: 'Valid amount is required' 
+          });
+        }
+
+        const result = await this.razorpay.createPaymentIntent(amount, currency, metadata);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Payment intent creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/payments/capture/:paymentId', async (request, reply) => {
+      try {
+        const { paymentId } = request.params;
+        const { amount } = request.body;
+        
+        if (!amount || amount <= 0) {
+          return reply.code(400).send({ 
+            error: 'Valid amount is required' 
+          });
+        }
+
+        const result = await this.razorpay.capturePayment(paymentId, amount);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Payment capture error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/payments/refund/:paymentId', async (request, reply) => {
+      try {
+        const { paymentId } = request.params;
+        const { amount, reason = 'requested_by_customer' } = request.body;
+        
+        if (!amount || amount <= 0) {
+          return reply.code(400).send({ 
+            error: 'Valid amount is required' 
+          });
+        }
+
+        const result = await this.razorpay.createRefund(paymentId, amount, reason);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Refund creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/payments/:paymentId', async (request, reply) => {
+      try {
+        const { paymentId } = request.params;
+        const result = await this.razorpay.getPaymentDetails(paymentId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Payment details error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/payments/:paymentId/refunds', async (request, reply) => {
+      try {
+        const { paymentId } = request.params;
+        const result = await this.razorpay.getRefunds(paymentId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Refunds fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/payments/webhook', async (request, reply) => {
+      try {
+        const signature = request.headers['x-razorpay-signature'];
+        const body = JSON.stringify(request.body);
+        
+        if (!this.razorpay.verifyWebhookSignature(body, signature)) {
+          return reply.code(400).send({ error: 'Invalid webhook signature' });
+        }
+
+        const eventType = request.body.event;
+        const eventData = request.body;
+        
+        const result = await this.razorpay.processWebhookEvent(eventType, eventData);
+        
+        // Emit event for other services
+        this.eventBus.emit('payment:webhook', { eventType, eventData });
+        
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Webhook processing error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/payments/reconciliation', async (request, reply) => {
+      try {
+        const { startDate, endDate, organizationId = 'demo-org' } = request.query;
+        
+        if (!startDate || !endDate) {
+          return reply.code(400).send({ 
+            error: 'startDate and endDate are required' 
+          });
+        }
+
+        const reconciliationService = new PaymentReconciliationService(this.prisma);
+        const result = await reconciliationService.generateReconciliationReport(
+          organizationId, startDate, endDate
+        );
+        
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reconciliation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/payments/analytics', async (request, reply) => {
+      try {
+        const { startDate, endDate, organizationId = 'demo-org' } = request.query;
+        
+        if (!startDate || !endDate) {
+          return reply.code(400).send({ 
+            error: 'startDate and endDate are required' 
+          });
+        }
+
+        const reconciliationService = new PaymentReconciliationService(this.prisma);
+        const result = await reconciliationService.getPaymentAnalytics(
+          organizationId, startDate, endDate
+        );
+        
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Payment analytics error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
