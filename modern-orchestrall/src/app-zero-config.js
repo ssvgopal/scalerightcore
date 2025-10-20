@@ -20,6 +20,8 @@ const { diffAndApply } = require('./bundles/apply');
 const PluginCatalogService = require('./plugins/service');
 const RazorpayService = require('./payments/razorpay-service');
 const PaymentReconciliationService = require('./payments/reconciliation-service');
+const ZohoCRMService = require('./crm/zoho-service');
+const CRMSyncService = require('./crm/sync-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -38,6 +40,7 @@ class ZeroConfigServer {
     this.notifications = new NotificationService();
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
+    this.zoho = new ZohoCRMService();
   }
 
   async initialize() {
@@ -826,6 +829,162 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Payment analytics error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // CRM APIs (Zoho)
+    this.app.get('/api/crm/sync-status', async (request, reply) => {
+      try {
+        const result = await this.zoho.getSyncStatus();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('CRM sync status error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/crm/leads', async (request, reply) => {
+      try {
+        const leadData = request.body;
+        const result = await this.zoho.createLead(leadData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Lead creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.put('/api/crm/leads/:leadId', async (request, reply) => {
+      try {
+        const { leadId } = request.params;
+        const leadData = request.body;
+        const result = await this.zoho.updateLead(leadId, leadData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Lead update error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/leads/:leadId', async (request, reply) => {
+      try {
+        const { leadId } = request.params;
+        const result = await this.zoho.getLead(leadId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Lead fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/leads/search', async (request, reply) => {
+      try {
+        const criteria = request.query;
+        const result = await this.zoho.searchLeads(criteria);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Lead search error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/crm/contacts', async (request, reply) => {
+      try {
+        const contactData = request.body;
+        const result = await this.zoho.createContact(contactData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Contact creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/crm/deals', async (request, reply) => {
+      try {
+        const dealData = request.body;
+        const result = await this.zoho.createDeal(dealData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Deal creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/crm/sync/start', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', options = {} } = request.body;
+        const syncService = new CRMSyncService(this.prisma);
+        const result = await syncService.startLeadSyncJob(organizationId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Sync job start error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/sync/jobs/:jobId', async (request, reply) => {
+      try {
+        const { jobId } = request.params;
+        const syncService = new CRMSyncService(this.prisma);
+        const result = await syncService.getSyncJobStatus(jobId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Sync job status error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/sync/jobs', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org' } = request.query;
+        const syncService = new CRMSyncService(this.prisma);
+        const result = await syncService.getAllSyncJobs(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Sync jobs list error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/crm/sync/jobs/:jobId/cancel', async (request, reply) => {
+      try {
+        const { jobId } = request.params;
+        const syncService = new CRMSyncService(this.prisma);
+        const result = await syncService.cancelSyncJob(jobId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Sync job cancel error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/sync/metrics', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', startDate, endDate } = request.query;
+        
+        if (!startDate || !endDate) {
+          return reply.code(400).send({ 
+            error: 'startDate and endDate are required' 
+          });
+        }
+
+        const syncService = new CRMSyncService(this.prisma);
+        const result = await syncService.getSyncMetrics(organizationId, startDate, endDate);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Sync metrics error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/crm/fields/:module', async (request, reply) => {
+      try {
+        const { module } = request.params;
+        const result = await this.zoho.getModuleFields(module);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Module fields error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
