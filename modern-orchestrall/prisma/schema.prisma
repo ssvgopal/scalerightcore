@@ -1176,3 +1176,52 @@ enum NotificationStatus {
   FAILED
   DELIVERED
 }
+
+// ===== OBSERVABILITY MODELS =====
+
+model Alert {
+  id          String   @id @default(cuid())
+  ruleId      String
+  name        String
+  description String
+  severity    String   // critical, warning, info
+  condition   String
+  status      String   // active, resolved, acknowledged
+  triggeredAt DateTime
+  resolvedAt  DateTime?
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("alerts")
+}
+
+model PerformanceMetric {
+  id          String   @id @default(cuid())
+  organizationId String?
+  timestamp   DateTime
+  responseTime Float
+  throughput  Float
+  errorRate   Float
+  cpuUsage    Float
+  memoryUsage Float
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("performance_metrics")
+}
+
+model ApiLog {
+  id          String   @id @default(cuid())
+  organizationId String?
+  method      String
+  route       String
+  statusCode  Int
+  responseTime Float
+  userAgent   String?
+  ipAddress   String?
+  userId      String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("api_logs")
+}

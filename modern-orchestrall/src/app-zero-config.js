@@ -28,6 +28,7 @@ const ElasticsearchService = require('./search/elasticsearch-service');
 const SearchIndexingService = require('./search/indexing-service');
 const SarvamVoiceService = require('./voice/sarvam-service');
 const TenantObservabilityService = require('./observability/tenant-service');
+const ObservabilityService = require('./observability/observability-service');
 const RBACService = require('./security/rbac-service');
 const MultiTenancyService = require('./multitenancy/service');
 
@@ -77,6 +78,7 @@ class ZeroConfigServer {
     this.elasticsearch = new ElasticsearchService();
     this.sarvamVoice = new SarvamVoiceService(this.prisma);
     this.tenantObservability = new TenantObservabilityService(this.prisma);
+    this.observability = new ObservabilityService(this.prisma);
     this.rbac = new RBACService(this.prisma);
     this.multitenancy = new MultiTenancyService(this.prisma);
     
@@ -298,6 +300,9 @@ class ZeroConfigServer {
       
       // Initialize Sarvam Voice service
       await this.sarvamVoice.initialize();
+      
+      // Initialize Observability service
+      await this.observability.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -2796,6 +2801,174 @@ class ZeroConfigServer {
               count: l._count.id
             }))
           }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Observability Routes
+    this.app.get('/metrics', async (request, reply) => {
+      try {
+        const metrics = await this.observability.getPrometheusMetrics();
+        reply.type('text/plain').send(metrics);
+      } catch (error) {
+        console.error('Failed to get Prometheus metrics:', error);
+        reply.status(500).send('Failed to get metrics');
+      }
+    });
+
+    this.app.get('/api/observability/health', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId } = request.query;
+          const health = await this.observability.getSystemHealth(organizationId);
+          reply.send(this.errorHandler.successResponse(health));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/observability/metrics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId } = request.query;
+          const metrics = await this.observability.getKeyMetrics(organizationId);
+          reply.send(this.errorHandler.successResponse(metrics));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/observability/performance', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId, timeRange = '24h' } = request.query;
+          const performance = await this.observability.getPerformanceMetrics(organizationId, timeRange);
+          reply.send(this.errorHandler.successResponse(performance));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/observability/business', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId, timeRange = '30d' } = request.query;
+          const businessMetrics = await this.observability.getBusinessMetrics(organizationId, timeRange);
+          reply.send(this.errorHandler.successResponse(businessMetrics));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/observability/alerts', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId, status = 'active', limit = 50 } = request.query;
+          
+          const alerts = await this.prisma.alert.findMany({
+            where: {
+              status,
+              ...(organizationId && { 
+                metadata: {
+                  path: ['organizationId'],
+                  equals: organizationId
+                }
+              })
+            },
+            orderBy: { triggeredAt: 'desc' },
+            take: parseInt(limit)
+          });
+          
+          reply.send(this.errorHandler.successResponse(alerts));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/observability/alerts/:alertId/acknowledge', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { alertId } = request.params;
+          const { acknowledgedBy } = request.body;
+          
+          const alert = await this.prisma.alert.update({
+            where: { id: alertId },
+            data: {
+              status: 'acknowledged',
+              acknowledgedAt: new Date(),
+              acknowledgedBy
+            }
+          });
+          
+          reply.send(this.errorHandler.successResponse(alert, 'Alert acknowledged successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/observability/alerts/:alertId/resolve', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { alertId } = request.params;
+          
+          const alert = await this.prisma.alert.update({
+            where: { id: alertId },
+            data: {
+              status: 'resolved',
+              resolvedAt: new Date()
+            }
+          });
+          
+          reply.send(this.errorHandler.successResponse(alert, 'Alert resolved successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/observability/grafana/dashboard', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const dashboardConfig = this.observability.getGrafanaDashboardConfig();
+          reply.send(this.errorHandler.successResponse(dashboardConfig));
         } catch (error) {
           throw error;
         }
