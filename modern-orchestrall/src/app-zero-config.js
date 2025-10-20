@@ -17,6 +17,7 @@ const { restoreFromSnapshot } = require('./backup/restore');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
+const PluginCatalogService = require('./plugins/service');
 
 class ZeroConfigServer {
   constructor() {
@@ -33,6 +34,7 @@ class ZeroConfigServer {
       httpRequestsTotal: null,
     };
     this.notifications = new NotificationService();
+    this.pluginCatalog = new PluginCatalogService();
   }
 
   async initialize() {
@@ -591,6 +593,90 @@ class ZeroConfigServer {
         reply.send({ success: true, client, bundle: { id: bundle.id, version: bundle.version, plugins: bundle.plugins.map(p=>p.id) } });
       } catch (err) {
         reply.code(404).send({ success: false, error: err.message });
+      }
+    });
+
+    // Plugin Marketplace APIs
+    this.app.get('/api/plugins/catalog', async (request, reply) => {
+      try {
+        const catalog = await this.pluginCatalog.getCatalog();
+        return reply.send(catalog);
+      } catch (error) {
+        this.app.log.error('Plugin catalog error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/plugins/catalog/:pluginId', async (request, reply) => {
+      try {
+        const { pluginId } = request.params;
+        const plugin = await this.pluginCatalog.getPlugin(pluginId);
+        
+        if (!plugin) {
+          return reply.code(404).send({ error: `Plugin ${pluginId} not found` });
+        }
+
+        return reply.send(plugin);
+      } catch (error) {
+        this.app.log.error('Plugin details error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/plugins/enable', async (request, reply) => {
+      try {
+        const { pluginId, organizationId } = request.body;
+        
+        if (!pluginId || !organizationId) {
+          return reply.code(400).send({ 
+            error: 'pluginId and organizationId are required' 
+          });
+        }
+
+        const result = await this.pluginCatalog.enablePlugin(pluginId, organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Plugin enable error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/plugins/disable', async (request, reply) => {
+      try {
+        const { pluginId, organizationId } = request.body;
+        
+        if (!pluginId || !organizationId) {
+          return reply.code(400).send({ 
+            error: 'pluginId and organizationId are required' 
+          });
+        }
+
+        const result = await this.pluginCatalog.disablePlugin(pluginId, organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Plugin disable error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/plugins/health-check/:pluginId', async (request, reply) => {
+      try {
+        const { pluginId } = request.params;
+        const healthData = await this.pluginCatalog.performHealthCheck(pluginId);
+        return reply.send(healthData);
+      } catch (error) {
+        this.app.log.error('Plugin health check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/plugins/metrics', async (request, reply) => {
+      try {
+        const metrics = await this.pluginCatalog.getPluginMetrics();
+        return reply.send(metrics);
+      } catch (error) {
+        this.app.log.error('Plugin metrics error:', error);
+        return reply.code(500).send({ error: error.message });
       }
     });
 

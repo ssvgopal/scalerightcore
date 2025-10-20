@@ -1,0 +1,185 @@
+{
+  "plugins": [
+    {
+      "id": "razorpay-payments",
+      "name": "Razorpay Payment Gateway",
+      "version": "1.0.0",
+      "description": "Payment processing, webhooks, refunds, reconciliation",
+      "category": "payments",
+      "provider": "razorpay",
+      "health": {
+        "status": "healthy",
+        "score": 95,
+        "lastChecked": "2024-01-20T10:00:00Z",
+        "checks": {
+          "apiConnectivity": "pass",
+          "webhookDelivery": "pass",
+          "refundProcessing": "pass"
+        }
+      },
+      "pricing": {
+        "tier": "standard",
+        "costPerTransaction": 0.02,
+        "monthlyFee": 0
+      },
+      "capabilities": [
+        "payment_processing",
+        "webhook_handling",
+        "refund_processing",
+        "reconciliation"
+      ],
+      "requirements": {
+        "apiKey": true,
+        "webhookSecret": true,
+        "merchantId": true
+      }
+    },
+    {
+      "id": "zoho-crm",
+      "name": "Zoho CRM Integration",
+      "version": "1.0.0",
+      "description": "Lead management, contact sync, deal tracking",
+      "category": "crm",
+      "provider": "zoho",
+      "health": {
+        "status": "healthy",
+        "score": 88,
+        "lastChecked": "2024-01-20T10:00:00Z",
+        "checks": {
+          "oauthToken": "pass",
+          "apiRateLimit": "pass",
+          "dataSync": "warning"
+        }
+      },
+      "pricing": {
+        "tier": "professional",
+        "costPerUser": 15,
+        "monthlyFee": 0
+      },
+      "capabilities": [
+        "lead_management",
+        "contact_sync",
+        "deal_tracking",
+        "reporting"
+      ],
+      "requirements": {
+        "clientId": true,
+        "clientSecret": true,
+        "refreshToken": true
+      }
+    },
+    {
+      "id": "elasticsearch-search",
+      "name": "Elasticsearch Search Engine",
+      "version": "1.0.0",
+      "description": "Full-text search, faceted search, analytics",
+      "category": "search",
+      "provider": "elastic",
+      "health": {
+        "status": "healthy",
+        "score": 92,
+        "lastChecked": "2024-01-20T10:00:00Z",
+        "checks": {
+          "clusterHealth": "pass",
+          "indexingSpeed": "pass",
+          "queryLatency": "pass"
+        }
+      },
+      "pricing": {
+        "tier": "enterprise",
+        "costPerGB": 0.50,
+        "monthlyFee": 100
+      },
+      "capabilities": [
+        "full_text_search",
+        "faceted_search",
+        "analytics",
+        "auto_complete"
+      ],
+      "requirements": {
+        "endpoint": true,
+        "apiKey": true,
+        "indexMapping": true
+      }
+    },
+    {
+      "id": "sarvam-voice",
+      "name": "Sarvam AI Voice Assistant",
+      "version": "1.0.0",
+      "description": "Multilingual voice processing, call analytics",
+      "category": "voice",
+      "provider": "sarvam",
+      "health": {
+        "status": "degraded",
+        "score": 75,
+        "lastChecked": "2024-01-20T10:00:00Z",
+        "checks": {
+          "apiConnectivity": "pass",
+          "audioProcessing": "warning",
+          "languageSupport": "pass"
+        }
+      },
+      "pricing": {
+        "tier": "premium",
+        "costPerMinute": 0.10,
+        "monthlyFee": 50
+      },
+      "capabilities": [
+        "voice_processing",
+        "multilingual_support",
+        "call_analytics",
+        "sentiment_analysis"
+      ],
+      "requirements": {
+        "apiKey": true,
+        "modelId": true,
+        "languageCodes": true
+      }
+    },
+    {
+      "id": "shopify-ecommerce",
+      "name": "Shopify E-commerce Integration",
+      "version": "1.0.0",
+      "description": "Product sync, order management, inventory tracking",
+      "category": "ecommerce",
+      "provider": "shopify",
+      "health": {
+        "status": "healthy",
+        "score": 90,
+        "lastChecked": "2024-01-20T10:00:00Z",
+        "checks": {
+          "apiConnectivity": "pass",
+          "webhookDelivery": "pass",
+          "dataSync": "pass"
+        }
+      },
+      "pricing": {
+        "tier": "standard",
+        "costPerOrder": 0.01,
+        "monthlyFee": 25
+      },
+      "capabilities": [
+        "product_sync",
+        "order_management",
+        "inventory_tracking",
+        "customer_sync"
+      ],
+      "requirements": {
+        "shopDomain": true,
+        "accessToken": true,
+        "webhookSecret": true
+      }
+    }
+  ],
+  "categories": [
+    "payments",
+    "crm",
+    "search",
+    "voice",
+    "ecommerce",
+    "analytics",
+    "communication",
+    "storage"
+  ],
+  "lastUpdated": "2024-01-20T10:00:00Z"
+}
