@@ -2975,6 +2975,131 @@ class ZeroConfigServer {
       }
     });
 
+    // Multi-tenancy Routes
+    this.app.post('/api/tenants', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { name, slug, tier = 'starter', customConfig = {} } = request.body;
+
+          if (!name || !slug) {
+            return reply.code(400).send({
+              error: 'Missing required fields: name, slug'
+            });
+          }
+
+          const result = await this.multitenancy.createTenant({
+            name,
+            slug,
+            tier,
+            customConfig
+          });
+
+          reply.send(this.errorHandler.successResponse(result.data, 'Tenant created successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/tenants', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const tenants = this.multitenancy.getAllTenants();
+          reply.send(this.errorHandler.successResponse(tenants));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/tenants/:tenantId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { tenantId } = request.params;
+          const config = this.multitenancy.getTenantConfig(tenantId);
+
+          if (!config) {
+            return reply.code(404).send({
+              error: 'Tenant not found'
+            });
+          }
+
+          reply.send(this.errorHandler.successResponse(config));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/tenants/:tenantId/usage', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { tenantId } = request.params;
+          const result = await this.multitenancy.getTenantUsage(tenantId);
+          reply.send(this.errorHandler.successResponse(result.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/tenants/:tenantId/analytics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { tenantId } = request.params;
+          const { timeRange = '30d' } = request.query;
+          const result = await this.multitenancy.getTenantAnalytics(tenantId, timeRange);
+          reply.send(this.errorHandler.successResponse(result.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/tenants/:tenantId/migrate', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { tenantId } = request.params;
+          const { targetIsolationMode } = request.body;
+
+          if (!targetIsolationMode) {
+            return reply.code(400).send({
+              error: 'Missing required field: targetIsolationMode'
+            });
+          }
+
+          const result = await this.multitenancy.migrateTenantData(tenantId, targetIsolationMode);
+          reply.send(this.errorHandler.successResponse(result, 'Tenant migration initiated'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
     console.log('✅ Real-time routes registered with authentication and validation');
   }
 

@@ -45,6 +45,7 @@ model Organization {
   stories     Story[]
   storyTemplates StoryTemplate[]
   stores      Store[]
+  tenantConfig TenantConfig?
   
   // Real-time features
   webSocketConnections WebSocketConnection[]
@@ -1224,4 +1225,45 @@ model ApiLog {
   metadata    Json     @default("{}")
   createdAt   DateTime @default(now())
   @@map("api_logs")
+}
+
+// ===== MULTI-TENANCY MODELS =====
+
+model TenantConfig {
+  id          String   @id @default(cuid())
+  organizationId String @unique
+  organization Organization @relation(fields: [organizationId], references: [id])
+  isolationMode String @default("schema") // schema, database, table
+  customConfig Json    @default("{}")
+  features    Json     @default("{}")
+  limits      Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("tenant_configs")
+}
+
+model TenantBackup {
+  id          String   @id @default(cuid())
+  tenantId    String
+  backupType  String   // migration, scheduled, manual
+  data        Json
+  status      String   // pending, completed, failed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("tenant_backups")
+}
+
+model TenantMigration {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fromMode    String   // source isolation mode
+  toMode      String   // target isolation mode
+  status      String   // pending, in_progress, completed, failed
+  startedAt   DateTime?
+  completedAt DateTime?
+  errorMessage String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("tenant_migrations")
 }
