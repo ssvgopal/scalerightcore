@@ -3,12 +3,18 @@ require('dotenv').config();
 const fastify = require('fastify');
 const path = require('path');
 const fs = require('fs');
+const EventEmitter = require('events');
+const client = require('prom-client');
 
 // Import services
 const DatabaseAutoSetup = require('./database/auto-setup');
 const getProfessionalAdminDashboardEnhancedHtml = require('./frontend/professional-admin-dashboard-enhanced').getProfessionalAdminDashboardEnhancedHtml;
 const UniversalCRUDService = require('./core/crud/UniversalCRUDService');
 const universalCRUDRoutes = require('./routes/universal-crud');
+const NotificationService = require('./notifications/service');
+const { runBackup } = require('./backup/service');
+const { restoreFromSnapshot } = require('./backup/restore');
+const { getLang, getDict } = require('./i18n/index');
 
 class ZeroConfigServer {
   constructor() {
@@ -17,6 +23,14 @@ class ZeroConfigServer {
     this.adminDashboard = null;
     this.prisma = null;
     this.isInitialized = false;
+    this.eventBus = new EventEmitter();
+    this.sseClients = new Set();
+    this.metrics = {
+      registry: new client.Registry(),
+      httpRequestDurationMs: null,
+      httpRequestsTotal: null,
+    };
+    this.notifications = new NotificationService();
   }
 
   async initialize() {
@@ -49,6 +63,9 @@ class ZeroConfigServer {
       // Initialize admin dashboard
       await this.initializeAdminDashboard();
       
+      // Initialize metrics
+      await this.initializeMetrics();
+
       // Register routes
       await this.registerRoutes();
       
@@ -134,6 +151,51 @@ class ZeroConfigServer {
     await this.app.register(require('@fastify/static'), {
       root: path.join(__dirname, '../../public'),
       prefix: '/',
+    });
+  }
+
+  async initializeMetrics() {
+    // Default metrics and custom metrics
+    client.collectDefaultMetrics({ register: this.metrics.registry });
+
+    this.metrics.httpRequestDurationMs = new client.Histogram({
+      name: 'http_request_duration_ms',
+      help: 'Duration of HTTP requests in ms',
+      labelNames: ['method', 'route', 'status_code'],
+      buckets: [25, 50, 100, 200, 300, 400, 500, 750, 1000, 2000]
+    });
+    this.metrics.registry.registerMetric(this.metrics.httpRequestDurationMs);
+
+    this.metrics.httpRequestsTotal = new client.Counter({
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+      labelNames: ['method', 'route', 'status_code']
+    });
+    this.metrics.registry.registerMetric(this.metrics.httpRequestsTotal);
+
+    // Fastify hooks to record metrics
+    this.app.addHook('onRequest', async (request, reply) => {
+      request._startAt = process.hrtime.bigint();
+    });
+
+    this.app.addHook('onResponse', async (request, reply) => {
+      try {
+        const route = request.routerPath || request.url;
+        const method = request.method;
+        const status = String(reply.statusCode);
+        if (request._startAt) {
+          const diffNs = Number(process.hrtime.bigint() - request._startAt);
+          const durationMs = diffNs / 1e6;
+          this.metrics.httpRequestDurationMs
+            .labels(method, route, status)
+            .observe(durationMs);
+        }
+        this.metrics.httpRequestsTotal
+          .labels(method, route, status)
+          .inc();
+      } catch (_) {
+        // ignore metrics errors
+      }
     });
   }
 
@@ -318,6 +380,17 @@ class ZeroConfigServer {
       });
     });
 
+    // Prometheus metrics endpoint
+    this.app.get('/metrics', async (request, reply) => {
+      try {
+        reply.header('Content-Type', this.metrics.registry.contentType);
+        const metrics = await this.metrics.registry.metrics();
+        reply.send(metrics);
+      } catch (err) {
+        reply.code(500).send('');
+      }
+    });
+
     // Root redirect to admin dashboard
     this.app.get('/', async (request, reply) => {
       reply.redirect('/admin/');
@@ -330,15 +403,53 @@ class ZeroConfigServer {
         const entityNames = Object.keys(this.prisma).filter(key => 
           !key.startsWith('$') && typeof this.prisma[key].findMany === 'function'
         );
-        
+        const lang = getLang(request);
         reply.header('Content-Type', 'text/html').send(
-          getProfessionalAdminDashboardEnhancedHtml(entityNames)
+          getProfessionalAdminDashboardEnhancedHtml(entityNames, getDict(lang))
         );
       } catch (error) {
         console.error('Failed to render admin dashboard', error);
         reply.code(500).send({ error: 'Failed to load admin dashboard' });
       }
     });
+
+    // Server-Sent Events (SSE) for realtime updates
+    this.app.get('/events', async (request, reply) => {
+      reply.headers({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      });
+      reply.raw.writeHead(200);
+      reply.raw.write('\n');
+
+      const clientRef = reply;
+      this.sseClients.add(clientRef);
+
+      // Heartbeat to keep connection alive
+      const interval = setInterval(() => {
+        try {
+          reply.raw.write(`event: ping\n`);
+          reply.raw.write(`data: {"ts":"${new Date().toISOString()}"}\n\n`);
+        } catch (_) {
+          // client likely disconnected
+        }
+      }, 25000);
+
+      request.raw.on('close', () => {
+        clearInterval(interval);
+        this.sseClients.delete(clientRef);
+      });
+    });
+
+    // Helper: broadcast events
+    const broadcast = (type, payload) => {
+      const msg = `event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
+      for (const res of this.sseClients) {
+        try { res.raw.write(msg); } catch (_) { /* ignore */ }
+      }
+      this.eventBus.emit(type, payload);
+    };
 
     // API info
     this.app.get('/api', async (request, reply) => {
@@ -363,6 +474,133 @@ class ZeroConfigServer {
       };
     });
 
+    // Advanced Analytics Endpoints (baseline implementations)
+    this.app.get('/api/analytics/cohort', async (request, reply) => {
+      try {
+        const organizationId = (request.user && request.user.organizationId) || undefined;
+        // Group users by month of createdAt (simple cohort by signup month)
+        const rows = await this.prisma.$queryRawUnsafe(`
+          SELECT to_char(date_trunc('month', "createdAt"),'YYYY-MM') AS cohort,
+                 COUNT(*)::int AS users
+          FROM "User"
+          ${organizationId ? `WHERE "organizationId" = '${organizationId}'` : ''}
+          GROUP BY 1
+          ORDER BY 1 ASC;
+        `);
+        reply.send({ success: true, data: rows });
+      } catch (err) {
+        reply.send({ success: true, data: [] });
+      }
+    });
+
+    this.app.get('/api/analytics/ltv', async (request, reply) => {
+      try {
+        const organizationId = (request.user && request.user.organizationId) || undefined;
+        // Approx LTV: average totalAmount per customer
+        const rows = await this.prisma.$queryRawUnsafe(`
+          SELECT o."customerId", COALESCE(SUM(o."totalAmount"),0)::float AS revenue
+          FROM "Order" o
+          ${organizationId ? `WHERE o."organizationId" = '${organizationId}'` : ''}
+          GROUP BY o."customerId";
+        `);
+        const avg = rows && rows.length ? rows.reduce((a,b)=>a+Number(b.revenue||0),0)/rows.length : 0;
+        reply.send({ success: true, data: { averageLTV: Number(avg.toFixed(2)), customers: rows } });
+      } catch (err) {
+        reply.send({ success: true, data: { averageLTV: 0, customers: [] } });
+      }
+    });
+
+    this.app.get('/api/analytics/funnel', async (request, reply) => {
+      try {
+        const organizationId = (request.user && request.user.organizationId) || undefined;
+        // Simple funnel: users -> orders -> paid orders (status='PAID')
+        const users = await this.prisma.user.count({ where: organizationId ? { organizationId } : {} });
+        const orders = await this.prisma.order.count({ where: organizationId ? { organizationId } : {} });
+        const paid = await this.prisma.order.count({ where: organizationId ? { organizationId, status: 'PAID' } : { status: 'PAID' } });
+        reply.send({ success: true, data: { users, orders, paid } });
+      } catch (err) {
+        reply.send({ success: true, data: { users: 0, orders: 0, paid: 0 } });
+      }
+    });
+
+    this.app.get('/api/analytics/retention', async (request, reply) => {
+      try {
+        const organizationId = (request.user && request.user.organizationId) || undefined;
+        // Retention proxy: customers with >1 orders / total customers
+        const rows = await this.prisma.$queryRawUnsafe(`
+          SELECT o."customerId", COUNT(*)::int AS orders
+          FROM "Order" o
+          ${organizationId ? `WHERE o."organizationId" = '${organizationId}'` : ''}
+          GROUP BY o."customerId";
+        `);
+        const total = rows.length;
+        const retained = rows.filter(r => Number(r.orders||0) > 1).length;
+        const rate = total ? Number(((retained/total)*100).toFixed(2)) : 0;
+        reply.send({ success: true, data: { retainedCustomers: retained, totalCustomers: total, retentionRate: rate } });
+      } catch (err) {
+        reply.send({ success: true, data: { retainedCustomers: 0, totalCustomers: 0, retentionRate: 0 } });
+      }
+    });
+
+    // Backup endpoints (admin)
+    this.app.post('/api/admin/backup', async (request, reply) => {
+      try {
+        const orgId = request.body && request.body.organizationId ? request.body.organizationId : undefined;
+        const res = await runBackup({ prisma: this.prisma, organizationId: orgId });
+        reply.send({ success: true, output: res.folder, index: res.index });
+      } catch (err) {
+        reply.code(500).send({ success: false, error: err.message });
+      }
+    });
+
+    this.app.post('/api/admin/restore', async (request, reply) => {
+      try {
+        const { folder, organizationId, mode } = request.body || {};
+        if (!folder) return reply.code(400).send({ success: false, error: 'folder is required' });
+        const res = await restoreFromSnapshot({ prisma: this.prisma, folder, organizationId, mode: mode || 'create-only' });
+        reply.send({ success: true, summary: res });
+      } catch (err) {
+        reply.code(500).send({ success: false, error: err.message });
+      }
+    });
+
+    // Simple Analytics KPIs for dashboard
+    this.app.get('/api/analytics/dashboard', async (request, reply) => {
+      try {
+        const organizationId = (request.user && request.user.organizationId) || 'demo-org';
+        const safeCount = async (model) => {
+          try { return await this.prisma[model].count({ where: { organizationId } }); } catch { return 0; }
+        };
+
+        const [totalUsers, totalProducts, totalOrders] = await Promise.all([
+          safeCount('user'),
+          safeCount('product'),
+          safeCount('order')
+        ]);
+
+        const uptime = process.uptime();
+        const memory = process.memoryUsage();
+
+        // derive simple health score (mocked/derived)
+        const healthScore = 100 - Math.min(40, Math.round((memory.heapUsed / memory.heapTotal) * 100));
+
+        reply.send({
+          success: true,
+          data: {
+            kpis: {
+              totalUsers,
+              totalProducts,
+              totalOrders,
+              systemHealth: healthScore,
+              uptimeSeconds: Math.round(uptime)
+            }
+          }
+        });
+      } catch (err) {
+        reply.code(500).send({ success: false, error: 'Failed to compute analytics' });
+      }
+    });
+
     // Mock authentication for demo
     this.app.addHook('preHandler', async (request, reply) => {
       // Skip auth for health and static files
@@ -382,7 +620,28 @@ class ZeroConfigServer {
     });
 
     // Register Universal CRUD routes
-    await this.app.register(universalCRUDRoutes, { prisma: this.prisma });
+    await this.app.register(universalCRUDRoutes, { prisma: this.prisma, broadcast });
+
+    // Wire notifications to events (example rules)
+    this.eventBus.on('crud:create', async (payload) => {
+      try {
+        await this.notifications.processEvent({
+          name: 'crud:create',
+          payload: { ...payload, message: `Created ${payload.entityName}` }
+        });
+      } catch (_) {}
+    });
+
+    // Minimal notification API
+    this.app.post('/api/notifications/test', async (request, reply) => {
+      const { type = 'email', to, subject, message, html } = request.body || {};
+      try {
+        const res = await this.notifications.notify({ type, to, subject, message, html });
+        reply.send({ success: true, result: res });
+      } catch (err) {
+        reply.code(400).send({ success: false, error: err.message });
+      }
+    });
 
     // Demo login endpoint
     this.app.post('/api/auth/login', async (request, reply) => {

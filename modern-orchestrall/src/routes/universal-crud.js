@@ -28,7 +28,7 @@ const bulkDeleteSchema = z.object({
 });
 
 async function universalCRUDRoutes(fastify, options) {
-  const { prisma } = options;
+  const { prisma, broadcast } = options;
   const crudService = new UniversalCRUDService(prisma);
 
   // Get all available entities
@@ -211,6 +211,7 @@ async function universalCRUDRoutes(fastify, options) {
       crudService.validateEntityData(entityName, data, 'create');
 
       const entity = await crudService.create(entityName, data, organizationId);
+      try { broadcast && broadcast('crud:create', { entityName, organizationId, entity }); } catch(_){}
       reply.code(201).send(entity);
     } catch (error) {
       fastify.log.error(error);
@@ -251,6 +252,7 @@ async function universalCRUDRoutes(fastify, options) {
       crudService.validateEntityData(entityName, data, 'update');
 
       const entity = await crudService.update(entityName, id, data, organizationId);
+      try { broadcast && broadcast('crud:update', { entityName, organizationId, id, entity }); } catch(_){}
       return entity;
     } catch (error) {
       fastify.log.error(error);
@@ -284,6 +286,7 @@ async function universalCRUDRoutes(fastify, options) {
       const organizationId = request.user.organizationId;
 
       const result = await crudService.delete(entityName, id, organizationId);
+      try { broadcast && broadcast('crud:delete', { entityName, organizationId, id, result }); } catch(_){}
       return result;
     } catch (error) {
       fastify.log.error(error);
@@ -327,6 +330,7 @@ async function universalCRUDRoutes(fastify, options) {
       const { items } = request.body;
 
       const result = await crudService.bulkCreate(entityName, items, organizationId);
+      try { broadcast && broadcast('crud:bulkCreate', { entityName, organizationId, count: items.length }); } catch(_){}
       reply.code(201).send(result);
     } catch (error) {
       fastify.log.error(error);
@@ -377,6 +381,7 @@ async function universalCRUDRoutes(fastify, options) {
       const { updates } = request.body;
 
       const result = await crudService.bulkUpdate(entityName, updates, organizationId);
+      try { broadcast && broadcast('crud:bulkUpdate', { entityName, organizationId, count: updates.length }); } catch(_){}
       return result;
     } catch (error) {
       fastify.log.error(error);
@@ -420,6 +425,7 @@ async function universalCRUDRoutes(fastify, options) {
       const { ids } = request.body;
 
       const result = await crudService.bulkDelete(entityName, ids, organizationId);
+      try { broadcast && broadcast('crud:bulkDelete', { entityName, organizationId, count: ids.length }); } catch(_){}
       return result;
     } catch (error) {
       fastify.log.error(error);

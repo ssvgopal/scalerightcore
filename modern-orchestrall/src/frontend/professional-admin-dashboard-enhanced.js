@@ -15,8 +15,9 @@ class ProfessionalAdminDashboardEnhanced {
   }
 
   // Generate enhanced professional admin dashboard HTML
-  generateHTML(entities = []) {
+  generateHTML(entities = [], dict = null) {
     this.entities = entities;
+    const D = dict || { appTitle: 'Orchestrall AI - Professional Admin Dashboard' };
     
     return `
     <!doctype html>
@@ -24,7 +25,7 @@ class ProfessionalAdminDashboardEnhanced {
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-        <title>Orchestrall AI - Professional Admin Dashboard</title>
+        <title>${D.appTitle}</title>
         
         <!-- Fonts -->
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1413,6 +1414,7 @@ class ProfessionalAdminDashboardEnhanced {
         // Global variables
         let currentView = 'dashboard';
         let wsManager = null;
+        let sse = null;
         let mobileOptimizer = null;
         let crudOperations = new Map();
         let isInitialized = false;
@@ -1427,12 +1429,35 @@ class ProfessionalAdminDashboardEnhanced {
             // Initialize mobile optimizer
             mobileOptimizer = new MobileOptimizer();
             
-            // Initialize WebSocket manager
-            wsManager = new WebSocketManager();
-            wsManager.connect();
-            
-            // Setup WebSocket event listeners
-            setupWebSocketListeners();
+            // Initialize Server-Sent Events for realtime updates
+            initSSE();
+        // Initialize SSE connection and listeners
+        function initSSE() {
+          try {
+            if (sse) { try { sse.close(); } catch(_){} }
+            sse = new EventSource('/events');
+            sse.onopen = () => {
+              updateConnectionStatus(true);
+            };
+            sse.onerror = () => {
+              updateConnectionStatus(false);
+            };
+            const refreshOn = (evt) => sse.addEventListener(evt, (e) => {
+              try {
+                const p = JSON.parse(e.data);
+                if (p.entityName) {
+                  refreshEntityPanel(p.entityName);
+                }
+                updateStatsCards();
+              } catch(_){}
+            });
+            ['crud:create','crud:update','crud:delete','crud:bulkCreate','crud:bulkUpdate','crud:bulkDelete'].forEach(refreshOn);
+          } catch (err) {
+            console.error('SSE initialization failed', err);
+            updateConnectionStatus(false);
+          }
+        }
+
             
             // Initialize CRUD operations for each entity
             await initializeCRUDOperations();
@@ -1744,22 +1769,22 @@ class ProfessionalAdminDashboardEnhanced {
           }
         }
 
-        // Update stats cards
+        // Update stats cards from backend KPIs
         async function updateStatsCards() {
           try {
-            // This would typically fetch real data from the API
-            const stats = {
-              'total-users': '1,234',
-              'active-plugins': '7',
-              'pending-approvals': '3',
-              'system-health': '99.9%'
+            const res = await fetch('/api/analytics/dashboard', { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('Failed to fetch KPIs');
+            const body = await res.json();
+            const kpis = (body && body.data && body.data.kpis) || {};
+            const map = {
+              'total-users': (kpis.totalUsers ?? 0).toLocaleString(),
+              'active-plugins': (kpis.activePlugins ?? 0).toLocaleString(),
+              'pending-approvals': (kpis.pendingApprovals ?? 0).toLocaleString(),
+              'system-health': kpis.systemHealth != null ? `${kpis.systemHealth}%` : '—'
             };
-
-            Object.entries(stats).forEach(([id, value]) => {
-              const element = document.getElementById(id);
-              if (element) {
-                element.textContent = value;
-              }
+            Object.entries(map).forEach(([id, value]) => {
+              const el = document.getElementById(id);
+              if (el) el.textContent = value;
             });
           } catch (error) {
             console.error('Error updating stats cards:', error);
