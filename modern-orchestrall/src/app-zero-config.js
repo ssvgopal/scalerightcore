@@ -26,6 +26,7 @@ const InventoryTransferService = require('./inventory/transfer-service');
 const ReorderRulesEngine = require('./inventory/reorder-engine');
 const ElasticsearchService = require('./search/elasticsearch-service');
 const SearchIndexingService = require('./search/indexing-service');
+const SarvamVoiceService = require('./voice/sarvam-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -48,6 +49,7 @@ class ZeroConfigServer {
     this.inventoryTransfer = new InventoryTransferService(this.prisma);
     this.reorderEngine = new ReorderRulesEngine(this.prisma);
     this.elasticsearch = new ElasticsearchService();
+    this.sarvamVoice = new SarvamVoiceService();
   }
 
   async initialize() {
@@ -1265,6 +1267,87 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Search document deletion error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Voice APIs (Sarvam AI)
+    this.app.post('/api/voice/process', async (request, reply) => {
+      try {
+        const { audioData, sessionId, ...options } = request.body;
+        
+        if (!audioData || !sessionId) {
+          return reply.code(400).send({ 
+            error: 'audioData and sessionId are required' 
+          });
+        }
+
+        const result = await this.sarvamVoice.processVoiceCall(audioData, sessionId, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Voice processing error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/voice/sessions/:sessionId', async (request, reply) => {
+      try {
+        const { sessionId } = request.params;
+        const result = await this.sarvamVoice.getCallSession(sessionId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Call session fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/voice/sessions', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', ...filters } = request.query;
+        const result = await this.sarvamVoice.getAllCallSessions(organizationId, filters);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Call sessions list error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/voice/analytics', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', startDate, endDate } = request.query;
+        
+        if (!startDate || !endDate) {
+          return reply.code(400).send({ 
+            error: 'startDate and endDate are required' 
+          });
+        }
+
+        const result = await this.sarvamVoice.getVoiceAnalytics(organizationId, startDate, endDate);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Voice analytics error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/voice/sessions/:sessionId/audio', async (request, reply) => {
+      try {
+        const { sessionId } = request.params;
+        const result = await this.sarvamVoice.getAudioUrl(sessionId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Audio URL generation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/voice/sessions/:sessionId', async (request, reply) => {
+      try {
+        const { sessionId } = request.params;
+        const result = await this.sarvamVoice.deleteCallSession(sessionId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Call session deletion error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
