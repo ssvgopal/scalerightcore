@@ -1267,3 +1267,33 @@ model TenantMigration {
   updatedAt   DateTime @updatedAt
   @@map("tenant_migrations")
 }
+
+// ===== BACKUP & RECOVERY MODELS =====
+
+model BackupRecord {
+  id          String   @id @default(cuid())
+  type        String   // full, incremental, tenant
+  status      String   // in_progress, completed, failed
+  startTime   DateTime
+  endTime     DateTime?
+  size        Int?     // bytes
+  manifest    Json?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  restores    RestoreRecord[]
+  @@map("backup_records")
+}
+
+model RestoreRecord {
+  id          String   @id @default(cuid())
+  backupId    String
+  backup      BackupRecord @relation(fields: [backupId], references: [id])
+  status      String   // in_progress, completed, failed
+  startTime   DateTime
+  endTime     DateTime?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("restore_records")
+}

@@ -14,6 +14,7 @@ const universalCRUDRoutes = require('./routes/universal-crud');
 const NotificationService = require('./notifications/service');
 const { runBackup } = require('./backup/service');
 const { restoreFromSnapshot } = require('./backup/restore');
+const BackupRecoveryService = require('./backup/backup-recovery-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -70,6 +71,7 @@ class ZeroConfigServer {
       httpRequestsTotal: null,
     };
     this.notifications = new NotificationService();
+    this.backupRecovery = new BackupRecoveryService(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -303,6 +305,9 @@ class ZeroConfigServer {
       
       // Initialize Observability service
       await this.observability.initialize();
+      
+      // Initialize Backup & Recovery service
+      await this.backupRecovery.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3094,6 +3099,139 @@ class ZeroConfigServer {
 
           const result = await this.multitenancy.migrateTenantData(tenantId, targetIsolationMode);
           reply.send(this.errorHandler.successResponse(result, 'Tenant migration initiated'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Backup & Recovery Routes
+    this.app.post('/api/backup/full', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const options = request.body || {};
+          const result = await this.backupRecovery.createFullBackup(options);
+          reply.send(this.errorHandler.successResponse(result.data, 'Full backup created successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/backup/incremental', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const options = request.body || {};
+          const result = await this.backupRecovery.createIncrementalBackup(options);
+          reply.send(this.errorHandler.successResponse(result.data, 'Incremental backup created successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/backup/tenant/:tenantId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { tenantId } = request.params;
+          const options = request.body || {};
+          const result = await this.backupRecovery.createTenantBackup(tenantId, options);
+          reply.send(this.errorHandler.successResponse(result.data, `Tenant backup created successfully for ${tenantId}`));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/backup', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { type, status, limit = 50, offset = 0 } = request.query;
+          const result = await this.backupRecovery.getBackupList({
+            type,
+            status,
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+          });
+          reply.send(this.errorHandler.successResponse(result.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/restore/:backupId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { backupId } = request.params;
+          const options = request.body || {};
+          const result = await this.backupRecovery.restoreFromBackup(backupId, options);
+          reply.send(this.errorHandler.successResponse(result.data, 'Restore initiated successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/backup/health', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const recentBackup = await this.prisma.backupRecord.findFirst({
+            where: {
+              status: 'completed',
+              type: 'full'
+            },
+            orderBy: { endTime: 'desc' }
+          });
+
+          const health = {
+            status: 'healthy',
+            lastFullBackup: recentBackup ? {
+              id: recentBackup.id,
+              endTime: recentBackup.endTime,
+              size: recentBackup.size,
+              ageHours: recentBackup.endTime ? 
+                Math.floor((Date.now() - recentBackup.endTime.getTime()) / (1000 * 60 * 60)) : null
+            } : null,
+            warnings: []
+          };
+
+          if (!recentBackup) {
+            health.warnings.push('No full backup found');
+            health.status = 'warning';
+          } else if (recentBackup.endTime) {
+            const ageHours = Math.floor((Date.now() - recentBackup.endTime.getTime()) / (1000 * 60 * 60));
+            if (ageHours > 48) {
+              health.warnings.push(`Last full backup is ${ageHours} hours old`);
+              health.status = 'warning';
+            }
+          }
+
+          reply.send(this.errorHandler.successResponse(health));
         } catch (error) {
           throw error;
         }
