@@ -574,10 +574,12 @@ model VoiceCall {
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id])
   language    String
-  duration    Int      // seconds
-  status      String   // active, completed, failed
-  transcript  String?
-  audioUrl    String?
+  duration    Int      // milliseconds
+  status      String   // processing, completed, failed
+  transcription String?
+  command     String?
+  response    String?
+  audioDataSize Int?
   metadata    Json     @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

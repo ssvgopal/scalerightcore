@@ -75,7 +75,7 @@ class ZeroConfigServer {
     this.inventoryTransfer = new InventoryTransferService(this.prisma);
     this.reorderEngine = new ReorderRulesEngine(this.prisma);
     this.elasticsearch = new ElasticsearchService();
-    this.sarvamVoice = new SarvamVoiceService();
+    this.sarvamVoice = new SarvamVoiceService(this.prisma);
     this.tenantObservability = new TenantObservabilityService(this.prisma);
     this.rbac = new RBACService(this.prisma);
     this.multitenancy = new MultiTenancyService(this.prisma);
@@ -295,6 +295,9 @@ class ZeroConfigServer {
       
       // Initialize Razorpay service
       await this.razorpay.initialize();
+      
+      // Initialize Sarvam Voice service
+      await this.sarvamVoice.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -2547,6 +2550,255 @@ class ZeroConfigServer {
       } catch (error) {
         this.app.log.error('Webhook error:', error);
         reply.code(400).send({ error: error.message });
+      }
+    });
+
+    // Voice Integration Routes
+    this.app.post('/api/voice/process', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { audioData, farmerId, language = 'hi' } = request.body;
+          
+          if (!audioData || !farmerId) {
+            return reply.code(400).send({
+              error: 'Missing required fields: audioData, farmerId'
+            });
+          }
+
+          const result = await this.sarvamVoice.processVoiceInput(audioData, farmerId, language);
+          reply.send(this.errorHandler.successResponse(result, 'Voice processed successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/voice/languages', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const languages = await this.sarvamVoice.getSupportedLanguages();
+          reply.send(this.errorHandler.successResponse(languages));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/voice/commands', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const commands = Array.from(this.sarvamVoice.voiceCommands.values()).map(cmd => ({
+            id: cmd.id,
+            name: cmd.name,
+            patterns: cmd.patterns.map(p => ({
+              language: p.language,
+              pattern: p.pattern
+            })),
+            requiredData: cmd.requiredData
+          }));
+          reply.send(this.errorHandler.successResponse(commands));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/voice/analytics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId, dateFrom, dateTo } = request.query;
+          
+          if (!organizationId) {
+            return reply.code(400).send({
+              error: 'Missing required parameter: organizationId'
+            });
+          }
+
+          const analytics = await this.sarvamVoice.getCallAnalytics(organizationId, {
+            dateFrom,
+            dateTo
+          });
+          reply.send(this.errorHandler.successResponse(analytics));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/voice/history/:farmerId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { farmerId } = request.params;
+          const { limit = 10, offset = 0 } = request.query;
+
+          const calls = await this.prisma.voiceCall.findMany({
+            where: { farmerId },
+            orderBy: { createdAt: 'desc' },
+            take: parseInt(limit),
+            skip: parseInt(offset),
+            select: {
+              id: true,
+              sessionId: true,
+              language: true,
+              duration: true,
+              status: true,
+              transcription: true,
+              command: true,
+              response: true,
+              createdAt: true,
+              metadata: true
+            }
+          });
+
+          const totalCount = await this.prisma.voiceCall.count({
+            where: { farmerId }
+          });
+          
+          reply.send(this.errorHandler.successResponse({
+            calls,
+            pagination: {
+              total: totalCount,
+              limit: parseInt(limit),
+              offset: parseInt(offset),
+              hasMore: (parseInt(offset) + parseInt(limit)) < totalCount
+            }
+          }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/voice/test', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { transcription, farmerId, language = 'hi' } = request.body;
+          
+          if (!transcription || !farmerId) {
+            return reply.code(400).send({
+              error: 'Missing required fields: transcription, farmerId'
+            });
+          }
+
+          const command = await this.sarvamVoice.identifyCommand(transcription, language);
+          const response = await this.sarvamVoice.executeCommand(command, farmerId, language);
+          
+          reply.send(this.errorHandler.successResponse({
+            transcription,
+            command: command.id,
+            response: response.text,
+            language
+          }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/voice/stats', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { organizationId } = request.query;
+          
+          if (!organizationId) {
+            return reply.code(400).send({
+              error: 'Missing required parameter: organizationId'
+            });
+          }
+
+          const stats = await this.prisma.voiceCall.groupBy({
+            by: ['status'],
+            where: {
+              farmer: {
+                organizationId
+              },
+              createdAt: {
+                gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+              }
+            },
+            _count: {
+              id: true
+            }
+          });
+
+          const totalCalls = await this.prisma.voiceCall.count({
+            where: {
+              farmer: {
+                organizationId
+              },
+              createdAt: {
+                gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+              }
+            }
+          });
+
+          const avgDuration = await this.prisma.voiceCall.aggregate({
+            where: {
+              farmer: {
+                organizationId
+              },
+              createdAt: {
+                gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+              }
+            },
+            _avg: {
+              duration: true
+            }
+          });
+
+          const languageStats = await this.prisma.voiceCall.groupBy({
+            by: ['language'],
+            where: {
+              farmer: {
+                organizationId
+              },
+              createdAt: {
+                gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+              }
+            },
+            _count: {
+              id: true
+            }
+          });
+          
+          reply.send(this.errorHandler.successResponse({
+            totalCalls,
+            averageDuration: Math.round(avgDuration._avg.duration || 0),
+            statusDistribution: stats.map(s => ({
+              status: s.status,
+              count: s._count.id
+            })),
+            languageDistribution: languageStats.map(l => ({
+              language: l.language,
+              count: l._count.id
+            }))
+          }));
+        } catch (error) {
+          throw error;
+        }
       }
     });
 
