@@ -22,6 +22,8 @@ const RazorpayService = require('./payments/razorpay-service');
 const PaymentReconciliationService = require('./payments/reconciliation-service');
 const ZohoCRMService = require('./crm/zoho-service');
 const CRMSyncService = require('./crm/sync-service');
+const InventoryTransferService = require('./inventory/transfer-service');
+const ReorderRulesEngine = require('./inventory/reorder-engine');
 
 class ZeroConfigServer {
   constructor() {
@@ -41,6 +43,8 @@ class ZeroConfigServer {
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
+    this.inventoryTransfer = new InventoryTransferService(this.prisma);
+    this.reorderEngine = new ReorderRulesEngine(this.prisma);
   }
 
   async initialize() {
@@ -985,6 +989,120 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Module fields error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Inventory Operations APIs
+    this.app.post('/api/inventory/transfers', async (request, reply) => {
+      try {
+        const transferData = request.body;
+        const result = await this.inventoryTransfer.createTransfer(transferData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Transfer creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/inventory/transfers/:transferId/approve', async (request, reply) => {
+      try {
+        const { transferId } = request.params;
+        const { approvedBy } = request.body;
+        const result = await this.inventoryTransfer.approveTransfer(transferId, approvedBy);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Transfer approval error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/inventory/transfers/:transferId/reject', async (request, reply) => {
+      try {
+        const { transferId } = request.params;
+        const { rejectedBy, reason } = request.body;
+        const result = await this.inventoryTransfer.rejectTransfer(transferId, rejectedBy, reason);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Transfer rejection error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/inventory/transfers', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', ...filters } = request.query;
+        const result = await this.inventoryTransfer.getTransfers(organizationId, filters);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Transfers fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/inventory/reorder-rules', async (request, reply) => {
+      try {
+        const ruleData = request.body;
+        const result = await this.reorderEngine.createReorderRule(ruleData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reorder rule creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/inventory/reorder-rules/execute', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', storeId } = request.body;
+        const result = await this.reorderEngine.executeReorderRules(organizationId, storeId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reorder rules execution error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/inventory/reorder-requests', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', ...filters } = request.query;
+        const result = await this.reorderEngine.getReorderRequests(organizationId, filters);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reorder requests fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.put('/api/inventory/reorder-rules/:ruleId', async (request, reply) => {
+      try {
+        const { ruleId } = request.params;
+        const updateData = request.body;
+        const result = await this.reorderEngine.updateReorderRule(ruleId, updateData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reorder rule update error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.delete('/api/inventory/reorder-rules/:ruleId', async (request, reply) => {
+      try {
+        const { ruleId } = request.params;
+        const result = await this.reorderEngine.deleteReorderRule(ruleId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Reorder rule deletion error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/inventory/audit-logs', async (request, reply) => {
+      try {
+        const { organizationId = 'demo-org', ...filters } = request.query;
+        const result = await this.inventoryTransfer.getAuditLogs(organizationId, filters);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Audit logs fetch error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
