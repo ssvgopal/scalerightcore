@@ -31,6 +31,13 @@ const TenantObservabilityService = require('./observability/tenant-service');
 const RBACService = require('./security/rbac-service');
 const MultiTenancyService = require('./multitenancy/service');
 
+// Agricultural Services
+const CropMonitoringService = require('./agricultural/crop-monitoring-service');
+const FarmerManagementService = require('./agricultural/farmer-management-service');
+const MarketIntelligenceService = require('./agricultural/market-intelligence-service');
+const AgriculturalFinancialService = require('./agricultural/agricultural-financial-service');
+const WeatherIntegrationService = require('./agricultural/weather-integration-service');
+
 class ZeroConfigServer {
   constructor() {
     this.app = null;
@@ -56,6 +63,13 @@ class ZeroConfigServer {
     this.tenantObservability = new TenantObservabilityService(this.prisma);
     this.rbac = new RBACService(this.prisma);
     this.multitenancy = new MultiTenancyService(this.prisma);
+    
+    // Initialize Agricultural Services
+    this.cropMonitoring = new CropMonitoringService(this.prisma);
+    this.farmerManagement = new FarmerManagementService(this.prisma);
+    this.marketIntelligence = new MarketIntelligenceService(this.prisma);
+    this.agriculturalFinance = new AgriculturalFinancialService(this.prisma);
+    this.weatherIntegration = new WeatherIntegrationService(this.prisma);
   }
 
   async initialize() {
@@ -1715,6 +1729,9 @@ class ZeroConfigServer {
       }
     });
 
+    // Agricultural APIs
+    this.registerAgriculturalRoutes();
+
     // Multi-tenancy APIs
     this.app.get('/api/multitenancy/tiers', async (request, reply) => {
       try {
@@ -2094,6 +2111,301 @@ class ZeroConfigServer {
       console.error('❌ Failed to start server:', error.message);
       process.exit(1);
     }
+  }
+
+  registerAgriculturalRoutes() {
+    // Crop Monitoring APIs
+    this.app.post('/api/agricultural/crop-monitoring/analyze', async (request, reply) => {
+      try {
+        const { farmerId, cropData } = request.body;
+        const result = await this.cropMonitoring.analyzeCropHealth(farmerId, cropData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Crop health analysis error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/crop-monitoring/predict-yield', async (request, reply) => {
+      try {
+        const { farmerId, cropData } = request.body;
+        const result = await this.cropMonitoring.predictYield(farmerId, cropData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Yield prediction error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/crop-monitoring/health-history/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const { cropType, limit } = request.query;
+        const result = await this.cropMonitoring.getCropHealthHistory(farmerId, cropType, limit);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Crop health history error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/crop-monitoring/yield-predictions/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const { cropType, limit } = request.query;
+        const result = await this.cropMonitoring.getYieldPredictions(farmerId, cropType, limit);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Yield predictions error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // Farmer Management APIs
+    this.app.post('/api/agricultural/farmers/register', async (request, reply) => {
+      try {
+        const farmerData = request.body;
+        const result = await this.farmerManagement.registerFarmer(farmerData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer registration error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/farmers/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const result = await this.farmerManagement.getFarmerProfile(farmerId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer profile error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.put('/api/agricultural/farmers/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const updateData = request.body;
+        const result = await this.farmerManagement.updateFarmerProfile(farmerId, updateData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer profile update error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/farmers/verify/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const verificationData = request.body;
+        const result = await this.farmerManagement.verifyFarmer(farmerId, verificationData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer verification error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/farmers', async (request, reply) => {
+      try {
+        const searchCriteria = request.query;
+        const result = await this.farmerManagement.searchFarmers(searchCriteria);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer search error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/farmers/statistics', async (request, reply) => {
+      try {
+        const result = await this.farmerManagement.getFarmerStatistics();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Farmer statistics error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // Market Intelligence APIs
+    this.app.get('/api/agricultural/market/prices', async (request, reply) => {
+      try {
+        const { cropType, location } = request.query;
+        const result = await this.marketIntelligence.getCurrentPrices(cropType, location);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Market prices error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/market/trends/:cropType', async (request, reply) => {
+      try {
+        const { cropType } = request.params;
+        const { period } = request.query;
+        const result = await this.marketIntelligence.analyzePriceTrends(cropType, period);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Price trends error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/market/selling-recommendation', async (request, reply) => {
+      try {
+        const { farmerId, cropType, quantity, location } = request.body;
+        const result = await this.marketIntelligence.getOptimalSellingRecommendation(farmerId, cropType, quantity, location);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Selling recommendation error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/market/alerts/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const { alertTypes } = request.query;
+        const types = alertTypes ? alertTypes.split(',') : ['price_drop', 'price_spike', 'weather_warning'];
+        const result = await this.marketIntelligence.getMarketAlerts(farmerId, types);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Market alerts error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/market/supply-demand/:cropType', async (request, reply) => {
+      try {
+        const { cropType } = request.params;
+        const { region } = request.query;
+        const result = await this.marketIntelligence.getSupplyDemandAnalysis(cropType, region);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Supply-demand analysis error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // Agricultural Financial Services APIs
+    this.app.post('/api/agricultural/finance/credit-score/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const result = await this.agriculturalFinance.calculateCreditScore(farmerId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Credit score calculation error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/finance/loan-application', async (request, reply) => {
+      try {
+        const loanData = request.body;
+        const result = await this.agriculturalFinance.processLoanApplication(loanData.farmerId, loanData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Loan application error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/finance/insurance-claim', async (request, reply) => {
+      try {
+        const claimData = request.body;
+        const result = await this.agriculturalFinance.processInsuranceClaim(claimData.farmerId, claimData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Insurance claim error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/finance/dashboard/:farmerId', async (request, reply) => {
+      try {
+        const { farmerId } = request.params;
+        const result = await this.agriculturalFinance.getFinancialDashboard(farmerId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Financial dashboard error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // Weather Integration APIs
+    this.app.get('/api/agricultural/weather/current', async (request, reply) => {
+      try {
+        const { location, lat, lon } = request.query;
+        const coordinates = lat && lon ? { lat: parseFloat(lat), lon: parseFloat(lon) } : null;
+        const result = await this.weatherIntegration.getCurrentWeather(location, coordinates);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Current weather error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/weather/forecast', async (request, reply) => {
+      try {
+        const { location, days, lat, lon } = request.query;
+        const coordinates = lat && lon ? { lat: parseFloat(lat), lon: parseFloat(lon) } : null;
+        const result = await this.weatherIntegration.getWeatherForecast(location, parseInt(days) || 7, coordinates);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Weather forecast error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/weather/historical', async (request, reply) => {
+      try {
+        const { location, startDate, endDate, lat, lon } = request.query;
+        const coordinates = lat && lon ? { lat: parseFloat(lat), lon: parseFloat(lon) } : null;
+        const result = await this.weatherIntegration.getHistoricalWeather(location, startDate, endDate, coordinates);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Historical weather error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.post('/api/agricultural/weather/alerts', async (request, reply) => {
+      try {
+        const { location, cropType, lat, lon } = request.body;
+        const coordinates = lat && lon ? { lat: parseFloat(lat), lon: parseFloat(lon) } : null;
+        const result = await this.weatherIntegration.generateWeatherAlerts(location, cropType, coordinates);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Weather alerts error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/weather/alerts/:location', async (request, reply) => {
+      try {
+        const { location } = request.params;
+        const { activeOnly } = request.query;
+        const result = await this.weatherIntegration.getWeatherAlerts(location, activeOnly !== 'false');
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Weather alerts fetch error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
+
+    this.app.get('/api/agricultural/weather/analytics/:location', async (request, reply) => {
+      try {
+        const { location } = request.params;
+        const { period } = request.query;
+        const result = await this.weatherIntegration.getWeatherAnalytics(location, period);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Weather analytics error:', error);
+        return reply.code(500).send({ success: false, error: error.message });
+      }
+    });
   }
 
   async stop() {
