@@ -29,6 +29,7 @@ const SearchIndexingService = require('./search/indexing-service');
 const SarvamVoiceService = require('./voice/sarvam-service');
 const TenantObservabilityService = require('./observability/tenant-service');
 const RBACService = require('./security/rbac-service');
+const MultiTenancyService = require('./multitenancy/service');
 
 class ZeroConfigServer {
   constructor() {
@@ -54,6 +55,7 @@ class ZeroConfigServer {
     this.sarvamVoice = new SarvamVoiceService();
     this.tenantObservability = new TenantObservabilityService(this.prisma);
     this.rbac = new RBACService(this.prisma);
+    this.multitenancy = new MultiTenancyService(this.prisma);
   }
 
   async initialize() {
@@ -1709,6 +1711,124 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('JWT token validation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Multi-tenancy APIs
+    this.app.get('/api/multitenancy/tiers', async (request, reply) => {
+      try {
+        const result = await this.multitenancy.initializeTenantTiers();
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant tiers fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/multitenancy/organizations/:organizationId/tier', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { tierId } = request.body;
+        
+        if (!tierId) {
+          return reply.code(400).send({ 
+            error: 'tierId is required' 
+          });
+        }
+
+        const result = await this.multitenancy.assignTenantTier(organizationId, tierId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant tier assignment error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/multitenancy/organizations/:organizationId/limits', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { resourceType, currentUsage } = request.query;
+        
+        if (!resourceType || currentUsage === undefined) {
+          return reply.code(400).send({ 
+            error: 'resourceType and currentUsage are required' 
+          });
+        }
+
+        const result = await this.multitenancy.checkTenantLimits(
+          organizationId, 
+          resourceType, 
+          parseInt(currentUsage)
+        );
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant limits check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/multitenancy/organizations/:organizationId/migrate', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { targetTier, options = {} } = request.body;
+        
+        if (!targetTier) {
+          return reply.code(400).send({ 
+            error: 'targetTier is required' 
+          });
+        }
+
+        const result = await this.multitenancy.startTenantMigration(organizationId, targetTier, options);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant migration start error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/multitenancy/migrations/:jobId', async (request, reply) => {
+      try {
+        const { jobId } = request.params;
+        const result = await this.multitenancy.getMigrationJobStatus(jobId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Migration job status error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/multitenancy/organizations/:organizationId/migrations', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const result = await this.multitenancy.getAllMigrationJobs(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Migration jobs list error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/multitenancy/organizations/:organizationId/export', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const exportOptions = request.body;
+        const result = await this.multitenancy.exportTenantData(organizationId, exportOptions);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant data export error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/multitenancy/organizations/:organizationId/slo', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { timeRange = '24h' } = request.query;
+        const result = await this.multitenancy.getSLOMetrics(organizationId, timeRange);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('SLO metrics fetch error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
