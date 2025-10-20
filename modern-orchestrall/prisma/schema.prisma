@@ -431,6 +431,28 @@ model FarmerProfile {
   transactions FarmerTransaction[]
   voiceCalls  VoiceCall[]
   crops       Crop[]
+  
+  // Enhanced farmer profile fields
+  phone       String?
+  email       String?
+  aadhaarNumber String?
+  panNumber   String?
+  bankAccountNumber String?
+  ifscCode    String?
+  verificationStatus String @default("pending") // pending, verified, rejected
+  
+  // New agricultural relations
+  documents   FarmerDocument[]
+  landRecords LandRecord[]
+  creditScores CreditScore[]
+  loanApplications LoanApplication[]
+  insuranceClaims InsuranceClaim[]
+  insurancePolicies InsurancePolicy[]
+  sellingRecommendations SellingRecommendation[]
+  weatherAlerts WeatherAlert[]
+  marketAlerts MarketAlert[]
+  verifications FarmerVerification[]
+  
   @@map("farmer_profiles")
 }
 
@@ -629,6 +651,11 @@ model Crop {
   yield       Decimal? @db.Decimal(10, 2)
   status      String   // planted, growing, harvested
   metadata    Json     @default("{}")
+  
+  // New agricultural relations
+  healthRecords CropHealthRecord[]
+  yieldPredictions YieldPrediction[]
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@map("crops")
@@ -715,4 +742,208 @@ model ReorderRule {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@map("reorder_rules")
+}
+
+// ===== AGRICULTURAL MODELS =====
+
+model FarmerDocument {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  documentType String  // aadhaar, pan, land_document, bank_passbook
+  documentNumber String?
+  documentUrl String?
+  status      String  @default("pending") // pending, verified, rejected
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("farmer_documents")
+}
+
+model LandRecord {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  surveyNumber String
+  area        Decimal  @db.Decimal(10, 2) // acres
+  soilType    String   // clay, sandy, loamy, black
+  irrigationType String // borewell, canal, rainfed
+  boundaries  Json     @default("{}") // GPS coordinates
+  ownershipType String  // owned, leased, shared
+  leaseExpiry DateTime?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("land_records")
+}
+
+model CropHealthRecord {
+  id          String   @id @default(cuid())
+  cropId      String
+  crop        Crop     @relation(fields: [cropId], references: [id])
+  healthScore Int      // 0-100
+  diseaseDetected String[] // array of disease names
+  pestDetected String[] // array of pest names
+  nutrientDeficiency String[] // array of nutrient names
+  recommendations Json @default("{}") // AI recommendations
+  images      String[] // URLs of crop images
+  assessedBy  String?  // user ID or system
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("crop_health_records")
+}
+
+model YieldPrediction {
+  id          String   @id @default(cuid())
+  cropId      String
+  crop        Crop     @relation(fields: [cropId], references: [id])
+  predictedYield Decimal @db.Decimal(10, 2)
+  confidence  Float    // 0-1 confidence score
+  factors     Json     @default("{}") // weather, soil, management factors
+  location    String
+  cropType    String
+  predictedAt DateTime @default(now())
+  metadata    Json     @default("{}")
+  @@map("yield_predictions")
+}
+
+model CreditScore {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  score       Int      // 0-100 credit score
+  factors     Json     @default("{}") // payment history, loan history, etc.
+  calculatedAt DateTime @default(now())
+  validUntil  DateTime
+  metadata    Json     @default("{}")
+  @@map("credit_scores")
+}
+
+model LoanApplication {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  amount      Decimal  @db.Decimal(10, 2)
+  purpose     String   // crop_cultivation, equipment, emergency
+  tenure      Int      // months
+  interestRate Decimal @db.Decimal(5, 2)
+  status      String   @default("pending") // pending, approved, rejected, disbursed, completed
+  appliedAt   DateTime @default(now())
+  approvedAt  DateTime?
+  disbursedAt DateTime?
+  completedAt DateTime?
+  approvedBy  String?
+  metadata    Json     @default("{}")
+  @@map("loan_applications")
+}
+
+model InsuranceClaim {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  policyId    String?
+  policy      InsurancePolicy? @relation(fields: [policyId], references: [id])
+  damageType  String   // drought, flood, pest, disease, hail, fire
+  damagePercentage Float // 0-100
+  damageArea  Decimal  @db.Decimal(10, 2) // acres
+  claimAmount Decimal  @db.Decimal(10, 2)
+  status      String   @default("filed") // filed, under_review, approved, rejected, paid
+  assessmentScore Float? // 0-100 automated assessment score
+  confidence  Float?   // 0-1 confidence in assessment
+  filedAt     DateTime @default(now())
+  assessedAt  DateTime?
+  approvedAt  DateTime?
+  paidAt      DateTime?
+  metadata    Json     @default("{}")
+  @@map("insurance_claims")
+}
+
+model InsurancePolicy {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  policyNumber String  @unique
+  cropType    String
+  coverageArea Decimal @db.Decimal(10, 2) // acres
+  sumInsured  Decimal  @db.Decimal(10, 2)
+  premium     Decimal  @db.Decimal(10, 2)
+  startDate   DateTime
+  endDate     DateTime
+  status      String   @default("active") // active, expired, cancelled
+  claims      InsuranceClaim[]
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("insurance_policies")
+}
+
+model SellingRecommendation {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  cropType    String
+  variety     String?
+  quantity    Decimal  @db.Decimal(10, 2)
+  recommendedPrice Decimal @db.Decimal(10, 2)
+  market      String   // recommended market
+  timing      String   // best time to sell
+  reasoning   String   // AI reasoning for recommendation
+  confidence  Float    // 0-1 confidence score
+  validUntil  DateTime
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("selling_recommendations")
+}
+
+model WeatherAlert {
+  id          String   @id @default(cuid())
+  farmerId    String?
+  farmer      FarmerProfile? @relation(fields: [farmerId], references: [id])
+  location    String
+  alertType   String   // heavy_rain, drought, storm, frost, heat_wave
+  severity    String   // low, medium, high, critical
+  message     String
+  validFrom   DateTime
+  validUntil  DateTime
+  status      String   @default("active") // active, expired, acknowledged
+  acknowledgedAt DateTime?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("weather_alerts")
+}
+
+model MarketAlert {
+  id          String   @id @default(cuid())
+  farmerId    String?
+  farmer      FarmerProfile? @relation(fields: [farmerId], references: [id])
+  cropType    String
+  alertType   String   // price_drop, price_spike, demand_increase, supply_shortage
+  severity    String   // low, medium, high, critical
+  message     String
+  currentPrice Decimal @db.Decimal(10, 2)
+  previousPrice Decimal @db.Decimal(10, 2)
+  changePercent Float
+  validUntil  DateTime
+  status      String   @default("active") // active, expired, acknowledged
+  acknowledgedAt DateTime?
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  @@map("market_alerts")
+}
+
+model FarmerVerification {
+  id          String   @id @default(cuid())
+  farmerId    String
+  farmer      FarmerProfile @relation(fields: [farmerId], references: [id])
+  verificationType String // kyc, land_verification, bank_verification
+  status      String   @default("pending") // pending, verified, rejected
+  verifiedAt  DateTime?
+  verifiedBy  String?
+  verificationData Json @default("{}") // verification details
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@map("farmer_verifications")
 }
