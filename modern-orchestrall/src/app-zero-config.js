@@ -50,6 +50,10 @@ const PushNotificationService = require('./notifications/push-service');
 const SMSService = require('./notifications/sms-service');
 const EmailService = require('./notifications/email-service');
 
+// Analytics and Workflow Services
+const AnalyticsService = require('./analytics/analytics-service');
+const WorkflowOrchestrationService = require('./workflows/workflow-orchestration-service');
+
 class ZeroConfigServer {
   constructor() {
     this.app = null;
@@ -94,6 +98,10 @@ class ZeroConfigServer {
     this.pushService = new PushNotificationService(this.prisma);
     this.smsService = new SMSService(this.prisma);
     this.emailService = new EmailService(this.prisma);
+    
+    // Initialize Analytics and Workflow Services
+    this.analytics = new AnalyticsService(this.prisma);
+    this.workflowOrchestration = new WorkflowOrchestrationService(this.prisma);
   }
 
   async initialize() {
@@ -131,6 +139,9 @@ class ZeroConfigServer {
 
       // Initialize real-time services
       await this.initializeRealTimeServices();
+
+      // Initialize analytics and workflow services
+      await this.initializeAnalyticsAndWorkflowServices();
 
       // Register routes
       await this.registerRoutes();
@@ -289,6 +300,74 @@ class ZeroConfigServer {
     } catch (error) {
       console.error('❌ Failed to initialize real-time services:', error);
       throw error;
+    }
+  }
+
+  async initializeAnalyticsAndWorkflowServices() {
+    console.log('📊 Initializing analytics and workflow services...');
+    
+    try {
+      // Initialize workflow orchestration service
+      await this.workflowOrchestration.initialize();
+      
+      // Set up workflow event listeners
+      this.workflowOrchestration.on('workflow:completed', (data) => {
+        console.log(`✅ Workflow completed: ${data.workflowId}`);
+      });
+      
+      this.workflowOrchestration.on('workflow:step:failed', (data) => {
+        console.error(`❌ Workflow step failed: ${data.workflowId} - Step ${data.stepIndex}`);
+      });
+      
+      this.workflowOrchestration.on('notification:send', (data) => {
+        // Handle notifications through real-time services
+        this.handleWorkflowNotification(data);
+      });
+      
+      console.log('✅ Analytics and workflow services initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize analytics and workflow services:', error);
+      throw error;
+    }
+  }
+
+  async handleWorkflowNotification(notificationData) {
+    try {
+      const { channels, template, context, priority } = notificationData;
+      
+      // Send notifications through appropriate channels
+      for (const channel of channels) {
+        switch (channel) {
+          case 'email':
+            await this.emailService.sendEmail(
+              context.email,
+              `Workflow Notification - ${template}`,
+              `<h2>Workflow Update</h2><p>Template: ${template}</p><p>Priority: ${priority}</p>`,
+              { userId: context.userId, type: 'workflow' }
+            );
+            break;
+          case 'sms':
+            await this.smsService.sendSMS(
+              context.phone,
+              `Workflow Update: ${template}`,
+              { userId: context.userId, type: 'workflow' }
+            );
+            break;
+          case 'push':
+            await this.pushService.sendNotification(
+              context.userId,
+              {
+                title: 'Workflow Update',
+                body: `Template: ${template}`,
+                type: 'workflow',
+                priority
+              }
+            );
+            break;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to handle workflow notification:', error);
     }
   }
 
@@ -1789,6 +1868,9 @@ class ZeroConfigServer {
     // Real-time APIs
     this.registerRealtimeRoutes();
 
+    // Analytics and Workflow APIs
+    this.registerAnalyticsAndWorkflowRoutes();
+
     // Multi-tenancy APIs
     this.app.get('/api/multitenancy/tiers', async (request, reply) => {
       try {
@@ -2469,6 +2551,207 @@ class ZeroConfigServer {
     });
 
     console.log('✅ Real-time routes registered with authentication and validation');
+  }
+
+  registerAnalyticsAndWorkflowRoutes() {
+    // Analytics Routes
+    this.app.get('/api/analytics/farmers', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.getFarmerAnalytics(request.user.organizationId, request.query);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/analytics/crops', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.getCropAnalytics(request.user.organizationId, request.query);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/analytics/market', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.getMarketAnalytics(request.user.organizationId, request.query);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/analytics/financial', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.getFinancialAnalytics(request.user.organizationId, request.query);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/analytics/dashboard', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.getDashboardKPIs(request.user.organizationId);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/analytics/reports/generate', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.analytics.generateCustomReport(request.user.organizationId, request.body);
+          reply.send(this.errorHandler.successResponse(result, 'Custom report generated successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Workflow Routes
+    this.app.get('/api/workflows/templates', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.getWorkflowTemplates();
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/workflows/create', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.createWorkflow(
+            request.body.templateId,
+            {
+              ...request.body.context,
+              organizationId: request.user.organizationId,
+              userId: request.user.userId
+            },
+            request.body.options
+          );
+          reply.send(this.errorHandler.successResponse(result, 'Workflow created successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/workflows/:workflowId/execute', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.executeWorkflow(request.params.workflowId);
+          reply.send(this.errorHandler.successResponse(result, 'Workflow executed successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/workflows/:workflowId/status', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.getWorkflowStatus(request.params.workflowId);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/workflows/active', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.getActiveWorkflows(request.user.organizationId);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/workflows/trigger', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.workflowOrchestration.triggerWorkflow(
+            request.body.templateId,
+            {
+              ...request.body.context,
+              organizationId: request.user.organizationId,
+              userId: request.user.userId
+            }
+          );
+          reply.send(this.errorHandler.successResponse(result, 'Workflow triggered successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    console.log('✅ Analytics and workflow routes registered with authentication and validation');
   }
 
     // Farmer Management APIs
