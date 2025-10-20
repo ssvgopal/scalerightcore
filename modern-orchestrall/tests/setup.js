@@ -1,4 +1,4 @@
-// tests/setup.js - Professional Test Setup Configuration
+// tests/setup.js - Enhanced Professional Test Setup Configuration
 const { PrismaClient } = require('@prisma/client');
 
 // Global test timeout
@@ -10,9 +10,10 @@ beforeAll(async () => {
   
   // Set test environment variables
   process.env.NODE_ENV = 'test';
-  process.env.JWT_SECRET = 'test-jwt-secret';
+  process.env.JWT_SECRET = 'test-jwt-secret-key-for-testing-only';
   process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/orchestrall_test';
   process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
+  process.env.PORT = '3001'; // Use different port for tests
   
   console.log('✅ Test environment configured');
 });
@@ -23,7 +24,19 @@ afterAll(async () => {
   
   // Clean up any global resources
   if (global.testPrisma) {
-    await global.testPrisma.$disconnect();
+    try {
+      await global.testPrisma.$disconnect();
+    } catch (error) {
+      console.log('⚠️ Error disconnecting test database:', error.message);
+    }
+  }
+  
+  if (global.testServer) {
+    try {
+      await global.testServer.close();
+    } catch (error) {
+      console.log('⚠️ Error closing test server:', error.message);
+    }
   }
   
   console.log('✅ Test environment cleaned up');
@@ -32,22 +45,34 @@ afterAll(async () => {
 // Global error handler for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process in tests
 });
 
 // Global error handler for uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
+  // Don't exit the process in tests
 });
 
 // Mock console methods in test environment to reduce noise
 if (process.env.NODE_ENV === 'test') {
-  global.console = {
-    ...console,
-    log: jest.fn(),
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+  const originalConsole = { ...console };
+  
+  // Only mock in test environment, not in CI
+  if (!process.env.CI) {
+    global.console = {
+      ...console,
+      log: jest.fn(),
+      debug: jest.fn(),
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+    };
+  }
+  
+  // Restore console for cleanup
+  global.restoreConsole = () => {
+    global.console = originalConsole;
   };
 }
 

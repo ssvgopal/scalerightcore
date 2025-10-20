@@ -1,0 +1,67 @@
+# Development Docker Compose Configuration
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: orchestrall-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: orchestrall_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - orchestrall-dev-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: orchestrall-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - orchestrall-dev-network
+
+  # Orchestrall Application (Development)
+  app:
+    build:
+      context: .
+      dockerfile: ./deployment/docker/app/Dockerfile
+      target: development
+    container_name: orchestrall-app-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/orchestrall_dev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-key
+      ENCRYPTION_KEY: dev-encryption-key
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    ports:
+      - "3000:3000"
+      - "9229:9229" # Debug port
+    networks:
+      - orchestrall-dev-network
+    depends_on:
+      - postgres
+      - redis
+    command: npm run dev:zero-config
+
+volumes:
+  postgres_dev_data:
+    driver: local
+
+networks:
+  orchestrall-dev-network:
+    driver: bridge

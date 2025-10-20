@@ -1,0 +1,162 @@
+# Artillery Load Testing Configuration
+
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 10
+      name: "Ramp up load"
+    - duration: 300
+      arrivalRate: 20
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 50
+      name: "Peak load"
+    - duration: 120
+      arrivalRate: 10
+      name: "Ramp down"
+  defaults:
+    headers:
+      Content-Type: 'application/json'
+  plugins:
+    metrics-by-endpoint:
+      useOnlyRequestNames: true
+
+scenarios:
+  - name: "Health Check Scenario"
+    weight: 30
+    flow:
+      - get:
+          url: "/health"
+          name: "Basic Health Check"
+      - think: 1
+      - get:
+          url: "/health/database"
+          name: "Database Health Check"
+      - think: 1
+      - get:
+          url: "/health/redis"
+          name: "Redis Health Check"
+      - think: 1
+      - get:
+          url: "/health/full"
+          name: "Full Health Check"
+
+  - name: "API Scenario"
+    weight: 40
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin@orchestrall.com"
+            password: "admin123"
+          name: "User Login"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - think: 2
+      - get:
+          url: "/api/entities"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          name: "Get Entities"
+      - think: 1
+      - get:
+          url: "/api/user"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          name: "Get Users"
+      - think: 1
+      - get:
+          url: "/api/organization"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          name: "Get Organizations"
+
+  - name: "CRUD Operations Scenario"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin@orchestrall.com"
+            password: "admin123"
+          name: "User Login"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - think: 2
+      - post:
+          url: "/api/user"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            email: "test{{ $randomInt(1, 10000) }}@example.com"
+            firstName: "Test"
+            lastName: "User"
+            role: "USER"
+            isActive: true
+          name: "Create User"
+          capture:
+            - json: "$.data.id"
+              as: "userId"
+      - think: 1
+      - get:
+          url: "/api/user/{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          name: "Get User by ID"
+      - think: 1
+      - put:
+          url: "/api/user/{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            firstName: "Updated"
+            lastName: "User"
+          name: "Update User"
+      - think: 1
+      - delete:
+          url: "/api/user/{{ userId }}"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          name: "Delete User"
+
+  - name: "Bulk Operations Scenario"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "admin@orchestrall.com"
+            password: "admin123"
+          name: "User Login"
+          capture:
+            - json: "$.token"
+              as: "authToken"
+      - think: 2
+      - post:
+          url: "/api/user/bulk"
+          headers:
+            Authorization: "Bearer {{ authToken }}"
+          json:
+            items:
+              - email: "bulk1{{ $randomInt(1, 10000) }}@example.com"
+                firstName: "Bulk"
+                lastName: "User1"
+                role: "USER"
+                isActive: true
+              - email: "bulk2{{ $randomInt(1, 10000) }}@example.com"
+                firstName: "Bulk"
+                lastName: "User2"
+                role: "USER"
+                isActive: true
+              - email: "bulk3{{ $randomInt(1, 10000) }}@example.com"
+                firstName: "Bulk"
+                lastName: "User3"
+                role: "USER"
+                isActive: true
+          name: "Bulk Create Users"

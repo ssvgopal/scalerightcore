@@ -6,7 +6,7 @@ const fs = require('fs');
 
 // Import services
 const DatabaseAutoSetup = require('./database/auto-setup');
-const getProfessionalAdminDashboardHtml = require('./frontend/professional-admin-dashboard');
+const getProfessionalAdminDashboardEnhancedHtml = require('./frontend/professional-admin-dashboard-enhanced').getProfessionalAdminDashboardEnhancedHtml;
 const UniversalCRUDService = require('./core/crud/UniversalCRUDService');
 const universalCRUDRoutes = require('./routes/universal-crud');
 
@@ -332,7 +332,7 @@ class ZeroConfigServer {
         );
         
         reply.header('Content-Type', 'text/html').send(
-          getProfessionalAdminDashboardHtml(entityNames)
+          getProfessionalAdminDashboardEnhancedHtml(entityNames)
         );
       } catch (error) {
         console.error('Failed to render admin dashboard', error);
