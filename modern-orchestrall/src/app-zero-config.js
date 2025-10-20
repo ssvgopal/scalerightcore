@@ -27,6 +27,7 @@ const ReorderRulesEngine = require('./inventory/reorder-engine');
 const ElasticsearchService = require('./search/elasticsearch-service');
 const SearchIndexingService = require('./search/indexing-service');
 const SarvamVoiceService = require('./voice/sarvam-service');
+const TenantObservabilityService = require('./observability/tenant-service');
 
 class ZeroConfigServer {
   constructor() {
@@ -50,6 +51,7 @@ class ZeroConfigServer {
     this.reorderEngine = new ReorderRulesEngine(this.prisma);
     this.elasticsearch = new ElasticsearchService();
     this.sarvamVoice = new SarvamVoiceService();
+    this.tenantObservability = new TenantObservabilityService(this.prisma);
   }
 
   async initialize() {
@@ -1348,6 +1350,141 @@ class ZeroConfigServer {
         return reply.send(result);
       } catch (error) {
         this.app.log.error('Call session deletion error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    // Observability APIs (Per-tenant)
+    this.app.post('/api/observability/tenant/:organizationId/initialize', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const result = await this.tenantObservability.initializeTenantMetrics(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant metrics initialization error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/observability/tenant/:organizationId/metrics', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { metricType, value, labels = {} } = request.body;
+        
+        if (!metricType || value === undefined) {
+          return reply.code(400).send({ 
+            error: 'metricType and value are required' 
+          });
+        }
+
+        const result = await this.tenantObservability.recordMetric(organizationId, metricType, value, labels);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Metric recording error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/observability/tenant/:organizationId/metrics', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const { timeRange = '1h' } = request.query;
+        const result = await this.tenantObservability.getTenantMetrics(organizationId, timeRange);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant metrics fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/observability/tenant/:organizationId/health', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const result = await this.tenantObservability.getTenantHealth(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant health check error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/observability/tenant/:organizationId/dashboards', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const dashboardConfig = request.body;
+        const result = await this.tenantObservability.createDashboard(organizationId, dashboardConfig);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Dashboard creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/observability/tenant/:organizationId/dashboards', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const result = await this.tenantObservability.getTenantDashboards(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Tenant dashboards fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/observability/tenant/:organizationId/dashboards/:dashboardId', async (request, reply) => {
+      try {
+        const { dashboardId } = request.params;
+        const result = await this.tenantObservability.getDashboard(dashboardId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Dashboard fetch error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/observability/tenant/:organizationId/alerts', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const ruleConfig = request.body;
+        const result = await this.tenantObservability.createAlertRule(organizationId, ruleConfig);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Alert rule creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/observability/tenant/:organizationId/alerts/evaluate', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const result = await this.tenantObservability.evaluateAlertRules(organizationId);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Alert evaluation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.post('/api/observability/tenant/:organizationId/audit', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const auditData = request.body;
+        const result = await this.tenantObservability.createAuditTrail(organizationId, auditData);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Audit trail creation error:', error);
+        return reply.code(500).send({ error: error.message });
+      }
+    });
+
+    this.app.get('/api/observability/tenant/:organizationId/audit', async (request, reply) => {
+      try {
+        const { organizationId } = request.params;
+        const filters = request.query;
+        const result = await this.tenantObservability.getAuditTrails(organizationId, filters);
+        return reply.send(result);
+      } catch (error) {
+        this.app.log.error('Audit trails fetch error:', error);
         return reply.code(500).send({ error: error.message });
       }
     });
