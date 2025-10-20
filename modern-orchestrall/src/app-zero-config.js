@@ -15,6 +15,7 @@ const NotificationService = require('./notifications/service');
 const { runBackup } = require('./backup/service');
 const { restoreFromSnapshot } = require('./backup/restore');
 const BackupRecoveryService = require('./backup/backup-recovery-service');
+const APIDocumentationService = require('./documentation/api-documentation-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -72,6 +73,7 @@ class ZeroConfigServer {
     };
     this.notifications = new NotificationService();
     this.backupRecovery = new BackupRecoveryService(this.prisma);
+    this.apiDocumentation = new APIDocumentationService(this.app, this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -308,6 +310,9 @@ class ZeroConfigServer {
       
       // Initialize Backup & Recovery service
       await this.backupRecovery.initialize();
+      
+      // Initialize API Documentation service
+      await this.apiDocumentation.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
