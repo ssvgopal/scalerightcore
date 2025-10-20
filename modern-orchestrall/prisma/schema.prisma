@@ -71,6 +71,9 @@ model User {
   // New client-specific relations
   stories        Story[]
   managedStores  Store[]
+  
+  // RBAC relations
+  roles          UserRole[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -946,4 +949,34 @@ model FarmerVerification {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@map("farmer_verifications")
+}
+
+// ===== RBAC MODELS =====
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  permissions String[] // Array of permission strings
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  users       UserRole[]
+  
+  @@map("roles")
+}
+
+model UserRole {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId   String
+  role     Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  assignedAt DateTime @default(now())
+  assignedBy String? // User ID who assigned the role
+  
+  @@unique([userId, roleId])
+  @@map("user_roles")
 }

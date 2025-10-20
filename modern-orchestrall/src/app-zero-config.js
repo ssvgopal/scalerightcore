@@ -31,6 +31,11 @@ const TenantObservabilityService = require('./observability/tenant-service');
 const RBACService = require('./security/rbac-service');
 const MultiTenancyService = require('./multitenancy/service');
 
+// Security and Validation Services
+const AuthMiddleware = require('./middleware/auth');
+const ValidationService = require('./validation/validation-service');
+const ErrorHandler = require('./middleware/error-handler');
+
 // Agricultural Services
 const CropMonitoringService = require('./agricultural/crop-monitoring-service');
 const FarmerManagementService = require('./agricultural/farmer-management-service');
@@ -63,6 +68,11 @@ class ZeroConfigServer {
     this.tenantObservability = new TenantObservabilityService(this.prisma);
     this.rbac = new RBACService(this.prisma);
     this.multitenancy = new MultiTenancyService(this.prisma);
+    
+    // Initialize Security Services
+    this.authMiddleware = new AuthMiddleware();
+    this.validationService = new ValidationService();
+    this.errorHandler = new ErrorHandler();
     
     // Initialize Agricultural Services
     this.cropMonitoring = new CropMonitoringService(this.prisma);
@@ -2057,29 +2067,10 @@ class ZeroConfigServer {
   }
 
   addErrorHandling() {
-    this.app.setErrorHandler(async (error, request, reply) => {
-      this.app.log.error(error);
-      
-      const statusCode = error.statusCode || 500;
-      const message = error.message || 'Internal Server Error';
-      
-      reply.code(statusCode).send({
-        error: message,
-        statusCode,
-        timestamp: new Date().toISOString(),
-        path: request.url
-      });
-    });
-
-    this.app.setNotFoundHandler(async (request, reply) => {
-      reply.code(404).send({
-        error: 'Not Found',
-        statusCode: 404,
-        timestamp: new Date().toISOString(),
-        path: request.url
-      });
-    });
-  }
+    // Use the comprehensive error handler
+    this.app.setErrorHandler(this.errorHandler.errorHandler());
+    
+    this.app.setNotFoundHandler(this.errorHandler.notFoundHandler());
 
   async start() {
     if (!this.isInitialized) {
@@ -2114,52 +2105,123 @@ class ZeroConfigServer {
   }
 
   registerAgriculturalRoutes() {
-    // Crop Monitoring APIs
-    this.app.post('/api/agricultural/crop-monitoring/analyze', async (request, reply) => {
-      try {
-        const { farmerId, cropData } = request.body;
-        const result = await this.cropMonitoring.analyzeCropHealth(farmerId, cropData);
-        return reply.send(result);
-      } catch (error) {
-        this.app.log.error('Crop health analysis error:', error);
-        return reply.code(500).send({ success: false, error: error.message });
+    // Secure agricultural routes with authentication and validation
+    
+    // Farmer Management Routes
+    this.app.post('/api/agricultural/farmers', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware),
+        this.validationService.validateBody('farmerProfile').bind(this.validationService)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.farmerManagement.registerFarmer(request.validatedData);
+          reply.send(this.errorHandler.successResponse(result, 'Farmer registered successfully'));
+        } catch (error) {
+          throw error;
+        }
       }
     });
 
-    this.app.post('/api/agricultural/crop-monitoring/predict-yield', async (request, reply) => {
-      try {
-        const { farmerId, cropData } = request.body;
-        const result = await this.cropMonitoring.predictYield(farmerId, cropData);
-        return reply.send(result);
-      } catch (error) {
-        this.app.log.error('Yield prediction error:', error);
-        return reply.code(500).send({ success: false, error: error.message });
+    this.app.get('/api/agricultural/farmers/:id', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.farmerManagement.getFarmerProfile(request.params.id);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
       }
     });
 
-    this.app.get('/api/agricultural/crop-monitoring/health-history/:farmerId', async (request, reply) => {
-      try {
-        const { farmerId } = request.params;
-        const { cropType, limit } = request.query;
-        const result = await this.cropMonitoring.getCropHealthHistory(farmerId, cropType, limit);
-        return reply.send(result);
-      } catch (error) {
-        this.app.log.error('Crop health history error:', error);
-        return reply.code(500).send({ success: false, error: error.message });
+    // Crop Monitoring Routes
+    this.app.post('/api/agricultural/crops', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware),
+        this.validationService.validateBody('crop').bind(this.validationService)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.cropMonitoring.addCrop(request.validatedData);
+          reply.send(this.errorHandler.successResponse(result, 'Crop added successfully'));
+        } catch (error) {
+          throw error;
+        }
       }
     });
 
-    this.app.get('/api/agricultural/crop-monitoring/yield-predictions/:farmerId', async (request, reply) => {
-      try {
-        const { farmerId } = request.params;
-        const { cropType, limit } = request.query;
-        const result = await this.cropMonitoring.getYieldPredictions(farmerId, cropType, limit);
-        return reply.send(result);
-      } catch (error) {
-        this.app.log.error('Yield predictions error:', error);
-        return reply.code(500).send({ success: false, error: error.message });
+    this.app.get('/api/agricultural/crops/:id/health', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.cropMonitoring.analyzeCropHealth(request.params.id);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
       }
     });
+
+    // Market Intelligence Routes
+    this.app.get('/api/agricultural/market/prices/:cropType', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.marketIntelligence.getCropPrices(request.params.cropType, request.query.location);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Weather Integration Routes
+    this.app.get('/api/agricultural/weather/current/:location', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.weatherIntegration.getCurrentWeather(request.params.location);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Financial Services Routes
+    this.app.post('/api/agricultural/loans', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'farmer']).bind(this.authMiddleware),
+        this.validationService.validateBody('loanApplication').bind(this.validationService)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const result = await this.agriculturalFinance.applyForLoan(request.user.id, request.validatedData);
+          reply.send(this.errorHandler.successResponse(result, 'Loan application submitted'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    console.log('✅ Agricultural routes registered with authentication and validation');
+  }
 
     // Farmer Management APIs
     this.app.post('/api/agricultural/farmers/register', async (request, reply) => {
