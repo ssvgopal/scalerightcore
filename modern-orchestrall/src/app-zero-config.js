@@ -6,7 +6,7 @@ const fs = require('fs');
 
 // Import services
 const DatabaseAutoSetup = require('./database/auto-setup');
-const AdminDashboard = require('./frontend/admin-dashboard');
+const getProfessionalAdminDashboardHtml = require('./frontend/professional-admin-dashboard');
 const UniversalCRUDService = require('./core/crud/UniversalCRUDService');
 const universalCRUDRoutes = require('./routes/universal-crud');
 
@@ -163,20 +163,181 @@ class ZeroConfigServer {
   }
 
   async registerRoutes() {
-    // Health check
+    // Enhanced Health Check Routes
     this.app.get('/health', async (request, reply) => {
-      return {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        version: '2.0.0',
-        database: this.prisma ? 'connected' : 'mock',
-        dashboard: 'ready'
+      try {
+        if (this.prisma && this.prisma.$queryRaw) {
+          await this.prisma.$queryRaw`SELECT 1`;
+        }
+        return {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          version: '2.0.0',
+          uptime: process.uptime(),
+          environment: process.env.NODE_ENV || 'development',
+          database: this.prisma ? 'connected' : 'mock',
+          dashboard: 'ready'
+        };
+      } catch (error) {
+        reply.code(503).send({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          error: error.message,
+          database: 'disconnected'
+        });
+      }
+    });
+
+    this.app.get('/health/database', async (request, reply) => {
+      try {
+        if (!this.prisma || !this.prisma.$queryRaw) {
+          return reply.send({
+            status: 'healthy',
+            service: 'database',
+            mode: 'mock',
+            timestamp: new Date().toISOString()
+          });
+        }
+
+        const start = Date.now();
+        await this.prisma.$queryRaw`SELECT 1`;
+        const responseTime = Date.now() - start;
+        
+        reply.send({
+          status: 'healthy',
+          service: 'database',
+          responseTime: `${responseTime}ms`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        reply.code(503).send({
+          status: 'unhealthy',
+          service: 'database',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    this.app.get('/health/redis', async (request, reply) => {
+      try {
+        const start = Date.now();
+        // Simple Redis ping test
+        const redis = require('ioredis');
+        const redisClient = new redis(process.env.REDIS_URL || 'redis://localhost:6379');
+        await redisClient.ping();
+        await redisClient.disconnect();
+        const responseTime = Date.now() - start;
+        
+        reply.send({
+          status: 'healthy',
+          service: 'redis',
+          responseTime: `${responseTime}ms`,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        reply.code(503).send({
+          status: 'unhealthy',
+          service: 'redis',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
+
+    this.app.get('/health/full', async (request, reply) => {
+      const healthChecks = {
+        database: { status: 'unknown', responseTime: null, error: null },
+        redis: { status: 'unknown', responseTime: null, error: null },
+        memory: { status: 'unknown', usage: null, limit: null }
       };
+      
+      let overallStatus = 'healthy';
+      
+      try {
+        // Database check
+        if (this.prisma && this.prisma.$queryRaw) {
+          const dbStart = Date.now();
+          await this.prisma.$queryRaw`SELECT 1`;
+          healthChecks.database = {
+            status: 'healthy',
+            responseTime: Date.now() - dbStart
+          };
+        } else {
+          healthChecks.database = {
+            status: 'healthy',
+            mode: 'mock'
+          };
+        }
+      } catch (error) {
+        healthChecks.database = {
+          status: 'unhealthy',
+          error: error.message
+        };
+        overallStatus = 'unhealthy';
+      }
+      
+      try {
+        // Redis check
+        const redisStart = Date.now();
+        const redis = require('ioredis');
+        const redisClient = new redis(process.env.REDIS_URL || 'redis://localhost:6379');
+        await redisClient.ping();
+        await redisClient.disconnect();
+        healthChecks.redis = {
+          status: 'healthy',
+          responseTime: Date.now() - redisStart
+        };
+      } catch (error) {
+        healthChecks.redis = {
+          status: 'unhealthy',
+          error: error.message
+        };
+        overallStatus = 'unhealthy';
+      }
+      
+      // Memory usage check
+      const memUsage = process.memoryUsage();
+      healthChecks.memory = {
+        status: memUsage.heapUsed / memUsage.heapTotal < 0.9 ? 'healthy' : 'warning',
+        usage: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+        limit: `${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`
+      };
+      
+      if (healthChecks.memory.status === 'warning') {
+        overallStatus = 'warning';
+      }
+      
+      reply.send({
+        status: overallStatus,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development',
+        version: '2.0.0',
+        checks: healthChecks
+      });
     });
 
     // Root redirect to admin dashboard
     this.app.get('/', async (request, reply) => {
       reply.redirect('/admin/');
+    });
+
+    // Admin Dashboard Frontend Route
+    this.app.get('/admin', async (request, reply) => {
+      try {
+        // Fetch entity names to dynamically build navigation
+        const entityNames = Object.keys(this.prisma).filter(key => 
+          !key.startsWith('$') && typeof this.prisma[key].findMany === 'function'
+        );
+        
+        reply.header('Content-Type', 'text/html').send(
+          getProfessionalAdminDashboardHtml(entityNames)
+        );
+      } catch (error) {
+        console.error('Failed to render admin dashboard', error);
+        reply.code(500).send({ error: 'Failed to load admin dashboard' });
+      }
     });
 
     // API info
