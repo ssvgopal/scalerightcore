@@ -16,6 +16,7 @@ const { runBackup } = require('./backup/service');
 const { restoreFromSnapshot } = require('./backup/restore');
 const BackupRecoveryService = require('./backup/backup-recovery-service');
 const APIDocumentationService = require('./documentation/api-documentation-service');
+const PerformanceOptimizationService = require('./performance/performance-optimization-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -74,6 +75,7 @@ class ZeroConfigServer {
     this.notifications = new NotificationService();
     this.backupRecovery = new BackupRecoveryService(this.prisma);
     this.apiDocumentation = new APIDocumentationService(this.app, this.prisma);
+    this.performanceOptimization = new PerformanceOptimizationService(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -313,6 +315,9 @@ class ZeroConfigServer {
       
       // Initialize API Documentation service
       await this.apiDocumentation.initialize();
+      
+      // Initialize Performance Optimization service
+      await this.performanceOptimization.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3237,6 +3242,68 @@ class ZeroConfigServer {
           }
 
           reply.send(this.errorHandler.successResponse(health));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Performance Optimization Routes
+    this.app.get('/api/performance/metrics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const metrics = await this.performanceOptimization.getPerformanceMetrics();
+          reply.send(this.errorHandler.successResponse(metrics));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/performance/cache/warm', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          await this.performanceOptimization.warmCache();
+          reply.send(this.errorHandler.successResponse(null, 'Cache warming completed'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/performance/cache/clear', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { pattern } = request.body;
+          await this.performanceOptimization.clear(pattern);
+          reply.send(this.errorHandler.successResponse(null, 'Cache cleared successfully'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/performance/queries/slow', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'analyst']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const analysis = await this.performanceOptimization.analyzeSlowQueries();
+          reply.send(this.errorHandler.successResponse(analysis));
         } catch (error) {
           throw error;
         }
