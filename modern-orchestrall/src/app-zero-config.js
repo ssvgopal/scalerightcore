@@ -19,6 +19,7 @@ const APIDocumentationService = require('./documentation/api-documentation-servi
 const PerformanceOptimizationService = require('./performance/performance-optimization-service');
 const InternationalizationService = require('./i18n/internationalization-service');
 const ClientOnboardingService = require('./onboarding/client-onboarding-service');
+const ProductionMonitoringService = require('./monitoring/production-monitoring-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -80,6 +81,7 @@ class ZeroConfigServer {
     this.performanceOptimization = new PerformanceOptimizationService(this.prisma);
     this.internationalization = new InternationalizationService(this.prisma);
     this.clientOnboarding = new ClientOnboardingService(this.prisma);
+    this.productionMonitoring = new ProductionMonitoringService(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -328,6 +330,9 @@ class ZeroConfigServer {
       
       // Initialize Client Onboarding service
       await this.clientOnboarding.initialize();
+      
+      // Initialize Production Monitoring service
+      await this.productionMonitoring.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3467,6 +3472,103 @@ class ZeroConfigServer {
           const { clientId } = request.params;
           const history = await this.clientOnboarding.getClientOnboardingHistory(clientId);
           reply.send(this.errorHandler.successResponse(history.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Production Monitoring Routes
+    this.app.get('/api/monitoring/metrics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const metrics = await this.productionMonitoring.getMetricsAsString();
+          reply.type('text/plain').send(metrics);
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/monitoring/alerts', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { status } = request.query;
+          const alerts = await this.productionMonitoring.getAlerts(status);
+          reply.send(this.errorHandler.successResponse(alerts));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/monitoring/alert-rules', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const rules = await this.productionMonitoring.getAlertRules();
+          reply.send(this.errorHandler.successResponse(rules));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/monitoring/business-metrics', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { timeRange = '1h' } = request.query;
+          const metrics = await this.productionMonitoring.getBusinessMetrics(timeRange);
+          reply.send(this.errorHandler.successResponse(metrics));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/monitoring/alerts/:alertId/acknowledge', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { alertId } = request.params;
+          const userId = request.user.id;
+          await this.productionMonitoring.acknowledgeAlert(alertId, userId);
+          reply.send(this.errorHandler.successResponse({ message: 'Alert acknowledged' }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/monitoring/alerts/:alertId/resolve', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { alertId } = request.params;
+          const userId = request.user.id;
+          await this.productionMonitoring.resolveAlertManually(alertId, userId);
+          reply.send(this.errorHandler.successResponse({ message: 'Alert resolved' }));
         } catch (error) {
           throw error;
         }

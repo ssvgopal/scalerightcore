@@ -71,6 +71,9 @@ model Organization {
   posConfigs PosConfig[]
   customerConfigs CustomerConfig[]
   analyticsConfigs AnalyticsConfig[]
+  grafanaDashboards GrafanaDashboard[]
+  alertRules AlertRule[]
+  notificationChannels NotificationChannel[]
 
   @@map("organizations")
 }
@@ -1543,4 +1546,81 @@ model AnalyticsConfig {
   updatedAt     DateTime @updatedAt
   
   @@map("analytics_configs")
+}
+
+// ===== PRODUCTION MONITORING MODELS =====
+
+model GrafanaDashboard {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  title         String
+  panels        Json     @default("[]")
+  organizationId String?
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("grafana_dashboards")
+}
+
+model AlertRule {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  condition     String
+  severity      String   // critical, warning, info
+  message       String
+  duration      String
+  organizationId String?
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled       Boolean  @default(true)
+  alerts        Alert[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("alert_rules")
+}
+
+model Alert {
+  id              String   @id @default(cuid())
+  ruleId          String
+  rule            AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  name            String
+  description     String
+  severity        String
+  status          String   // active, acknowledged, resolved
+  triggeredAt     DateTime
+  acknowledgedAt  DateTime?
+  acknowledgedBy  String?
+  resolvedAt      DateTime?
+  resolvedBy      String?
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("alerts")
+}
+
+model NotificationChannel {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  type          String   // email, slack, sms, webhook
+  config        Json     @default("{}")
+  organizationId String?
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("notification_channels")
+}
+
+model BusinessMetric {
+  id            String   @id @default(cuid())
+  metric        String
+  value         Float
+  timestamp     DateTime @default(now())
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  
+  @@map("business_metrics")
 }
