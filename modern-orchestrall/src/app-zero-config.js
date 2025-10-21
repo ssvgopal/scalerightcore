@@ -18,6 +18,7 @@ const BackupRecoveryService = require('./backup/backup-recovery-service');
 const APIDocumentationService = require('./documentation/api-documentation-service');
 const PerformanceOptimizationService = require('./performance/performance-optimization-service');
 const InternationalizationService = require('./i18n/internationalization-service');
+const ClientOnboardingService = require('./onboarding/client-onboarding-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -78,6 +79,7 @@ class ZeroConfigServer {
     this.apiDocumentation = new APIDocumentationService(this.app, this.prisma);
     this.performanceOptimization = new PerformanceOptimizationService(this.prisma);
     this.internationalization = new InternationalizationService(this.prisma);
+    this.clientOnboarding = new ClientOnboardingService(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -323,6 +325,9 @@ class ZeroConfigServer {
       
       // Initialize Internationalization service
       await this.internationalization.initialize();
+      
+      // Initialize Client Onboarding service
+      await this.clientOnboarding.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3382,6 +3387,86 @@ class ZeroConfigServer {
           const userId = request.user.id;
           const language = await this.internationalization.getUserLanguagePreference(userId);
           reply.send(this.errorHandler.successResponse({ language }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Client Onboarding Routes
+    this.app.get('/api/onboarding/templates', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const templates = await this.clientOnboarding.getOnboardingTemplates();
+          reply.send(this.errorHandler.successResponse(templates.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/onboarding/start', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { clientId, templateId, options } = request.body;
+          const result = await this.clientOnboarding.startOnboarding(clientId, templateId, options);
+          reply.send(this.errorHandler.successResponse(result.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/onboarding/status/:clientId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'user']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { clientId } = request.params;
+          const status = await this.clientOnboarding.getOnboardingStatus(clientId);
+          reply.send(this.errorHandler.successResponse(status.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/onboarding/step/:sessionId/:stepNumber', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { sessionId, stepNumber } = request.params;
+          const result = await this.clientOnboarding.executeOnboardingStep(sessionId, parseInt(stepNumber));
+          reply.send(this.errorHandler.successResponse(result.data));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/onboarding/history/:clientId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { clientId } = request.params;
+          const history = await this.clientOnboarding.getClientOnboardingHistory(clientId);
+          reply.send(this.errorHandler.successResponse(history.data));
         } catch (error) {
           throw error;
         }

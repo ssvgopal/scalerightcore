@@ -54,6 +54,23 @@ model Organization {
   payments Payment[]
   subscriptions Subscription[]
   notificationPreferences NotificationPreference[]
+  
+  // Client onboarding relations
+  onboardingSessions OnboardingSession[]
+  farmerAssociations FarmerAssociation[]
+  cropTypes CropType[]
+  weatherConfigs WeatherConfig[]
+  marketConfigs MarketConfig[]
+  voiceConfigs VoiceConfig[]
+  paymentConfigs PaymentConfig[]
+  notificationConfigs NotificationConfig[]
+  productCategories ProductCategory[]
+  sales Sale[]
+  staff Staff[]
+  staffRoles StaffRole[]
+  posConfigs PosConfig[]
+  customerConfigs CustomerConfig[]
+  analyticsConfigs AnalyticsConfig[]
 
   @@map("organizations")
 }
@@ -369,6 +386,8 @@ model Product {
   orderItems  OrderItem[]
   transfers   InventoryTransfer[]
   reorderRules ReorderRule[]
+  category    ProductCategory? @relation(fields: [categoryId], references: [id])
+  categoryId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@map("products")
@@ -438,6 +457,7 @@ model Customer {
   organizationId String
   organization Organization @relation(fields: [organizationId], references: [id])
   orders      Order[]
+  sales       Sale[]
   @@map("customers")
 }
 
@@ -453,6 +473,8 @@ model FarmerProfile {
   payments Payment[]
   subscriptions Subscription[]
   crops       Crop[]
+  farmerAssociation FarmerAssociation? @relation(fields: [farmerAssociationId], references: [id])
+  farmerAssociationId String?
   
   // Enhanced farmer profile fields
   phone       String?
@@ -680,6 +702,8 @@ model Crop {
   // New agricultural relations
   healthRecords CropHealthRecord[]
   yieldPredictions YieldPrediction[]
+  cropType     CropType? @relation(fields: [cropTypeId], references: [id])
+  cropTypeId   String?
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -730,6 +754,8 @@ model Store {
   transfersTo InventoryTransfer[] @relation("TransferTo")
   performance StorePerformance[]
   reorderRules ReorderRule[]
+  sales       Sale[]
+  staff       Staff[]
   metadata    Json     @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -1297,5 +1323,224 @@ model RestoreRecord {
   metadata    Json     @default("{}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
   @@map("restore_records")
+}
+
+// ===== CLIENT ONBOARDING MODELS =====
+
+model OnboardingSession {
+  id                String   @id @default(cuid())
+  clientId          String
+  client            Organization @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  templateId        String
+  status            String   // pending, in_progress, completed, failed
+  currentStep       Int      @default(1)
+  totalSteps        Int
+  progress          Int      @default(0)
+  startedAt         DateTime @default(now())
+  completedAt       DateTime?
+  estimatedCompletion DateTime?
+  metadata          Json     @default("{}")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("onboarding_sessions")
+}
+
+model FarmerAssociation {
+  id            String   @id @default(cuid())
+  name          String
+  region        String
+  description   String?
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  farmers       FarmerProfile[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("farmer_associations")
+}
+
+model CropType {
+  id            String   @id @default(cuid())
+  name          String
+  type          String   // cereal, cash_crop, vegetable, fruit
+  season        String   // kharif, rabi, year_round
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  crops         Crop[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("crop_types")
+}
+
+model WeatherConfig {
+  id              String   @id @default(cuid())
+  region          String
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alertThresholds Json     @default("{}")
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("weather_configs")
+}
+
+model MarketConfig {
+  id              String   @id @default(cuid())
+  commodity       String
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  monitoringEnabled Boolean @default(true)
+  alertThresholds Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("market_configs")
+}
+
+model VoiceConfig {
+  id            String   @id @default(cuid())
+  language      String
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled       Boolean  @default(true)
+  commands      Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("voice_configs")
+}
+
+model PaymentConfig {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider      String   // razorpay, stripe, paypal
+  enabled       Boolean  @default(true)
+  config        Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("payment_configs")
+}
+
+model NotificationConfig {
+  id            String   @id @default(cuid())
+  type          String   // sms, email, push
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled       Boolean  @default(true)
+  provider      String
+  config        Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("notification_configs")
+}
+
+model ProductCategory {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products      Product[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("product_categories")
+}
+
+model Sale {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store @relation(fields: [storeId], references: [id])
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer? @relation(fields: [customerId], references: [id])
+  staffId       String?
+  staff         Staff? @relation(fields: [staffId], references: [id])
+  totalAmount   Decimal
+  discount      Decimal  @default(0)
+  tax           Decimal  @default(0)
+  paymentMethod String
+  status        String   @default("completed") // pending, completed, refunded
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("sales")
+}
+
+model Staff {
+  id            String   @id @default(cuid())
+  name          String
+  email         String   @unique
+  phone         String?
+  storeId       String
+  store         Store @relation(fields: [storeId], references: [id])
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role          String
+  status        String   @default("active") // active, inactive, terminated
+  sales         Sale[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("staff")
+}
+
+model StaffRole {
+  id            String   @id @default(cuid())
+  name          String
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  permissions   Json     @default("[]")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("staff_roles")
+}
+
+model PosConfig {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  provider      String
+  enabled       Boolean  @default(true)
+  config        Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("pos_configs")
+}
+
+model CustomerConfig {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  loyaltyProgram Boolean @default(false)
+  customerSegmentation Boolean @default(false)
+  marketingAutomation Boolean @default(false)
+  config        Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("customer_configs")
+}
+
+model AnalyticsConfig {
+  id            String   @id @default(cuid())
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  enabled       Boolean  @default(true)
+  config        Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("analytics_configs")
 }
