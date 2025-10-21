@@ -20,6 +20,7 @@ const PerformanceOptimizationService = require('./performance/performance-optimi
 const InternationalizationService = require('./i18n/internationalization-service');
 const ClientOnboardingService = require('./onboarding/client-onboarding-service');
 const ProductionMonitoringService = require('./monitoring/production-monitoring-service');
+const ProductionBackupStrategy = require('./backup/production-backup-strategy');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -82,6 +83,7 @@ class ZeroConfigServer {
     this.internationalization = new InternationalizationService(this.prisma);
     this.clientOnboarding = new ClientOnboardingService(this.prisma);
     this.productionMonitoring = new ProductionMonitoringService(this.prisma);
+    this.productionBackupStrategy = new ProductionBackupStrategy(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -333,6 +335,9 @@ class ZeroConfigServer {
       
       // Initialize Production Monitoring service
       await this.productionMonitoring.initialize();
+      
+      // Initialize Production Backup Strategy
+      await this.productionBackupStrategy.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3569,6 +3574,56 @@ class ZeroConfigServer {
           const userId = request.user.id;
           await this.productionMonitoring.resolveAlertManually(alertId, userId);
           reply.send(this.errorHandler.successResponse({ message: 'Alert resolved' }));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Production Backup Strategy Routes
+    this.app.get('/api/backup/status', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const status = await this.productionBackupStrategy.getBackupStatus();
+          reply.send(this.errorHandler.successResponse(status));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/backup/trigger/:type', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { type } = request.params;
+          const { options } = request.body;
+          const result = await this.productionBackupStrategy.triggerManualBackup(type, options);
+          reply.send(this.errorHandler.successResponse(result));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/backup/restore/:backupId', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { backupId } = request.params;
+          const { options } = request.body;
+          const result = await this.productionBackupStrategy.restoreFromBackup(backupId, options);
+          reply.send(this.errorHandler.successResponse(result));
         } catch (error) {
           throw error;
         }
