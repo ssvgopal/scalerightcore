@@ -5,9 +5,18 @@
   "main": "src/app-commercial.js",
   "scripts": {
     "start": "node src/app-commercial.js",
+    "start:production": "NODE_ENV=production node src/app-zero-config.js",
     "start:zero-config": "node src/app-zero-config.js",
     "dev": "nodemon src/app-commercial.js",
     "dev:zero-config": "nodemon src/app-zero-config.js",
+    "build": "npm run build:prisma && npm run build:app",
+    "build:prisma": "npx prisma generate",
+    "build:app": "echo 'App build completed'",
+    "deploy:railway": "bash scripts/deploy-railway.sh",
+    "deploy:aws": "bash scripts/deploy-aws.sh",
+    "health:check": "bash scripts/health-check.sh",
+    "migrate:production": "npx prisma migrate deploy",
+    "seed:production": "npx prisma db seed",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -37,9 +46,7 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup.js"
-    ],
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
     "testMatch": [
       "**/tests/**/*.test.js",
       "**/tests/**/*.spec.js"
@@ -51,11 +58,7 @@
       "!src/seed.js"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
+    "coverageReporters": ["text", "lcov", "html"],
     "coverageThreshold": {
       "global": {
         "branches": 80,
@@ -74,24 +77,18 @@
     "@fastify/rate-limit": "^9.1.0",
     "@fastify/request-context": "^4.0.0",
     "@fastify/static": "^6.12.0",
-    "@fastify/swagger": "^8.15.0",
-    "@fastify/swagger-ui": "^2.1.0",
+    "@fastify/swagger": "^8.12.0",
+    "@fastify/swagger-ui": "^2.0.0",
     "@prisma/client": "^5.22.0",
     "axios": "^1.6.2",
     "bcrypt": "^5.1.1",
     "dotenv": "^16.3.1",
     "fastify": "^4.24.3",
     "js-yaml": "^4.1.0",
-    "node-cache": "^5.1.2",
-    "nodemailer": "^7.0.9",
     "openai": "^4.20.1",
     "prisma": "^5.22.0",
-    "razorpay": "^2.9.6",
-    "redis": "^4.7.1",
-    "twilio": "^5.10.3",
-    "web-push": "^3.6.7",
+    "redis": "^4.6.10",
     "winston": "^3.11.0",
-    "ws": "^8.18.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
