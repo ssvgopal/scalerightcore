@@ -17,6 +17,7 @@ const { restoreFromSnapshot } = require('./backup/restore');
 const BackupRecoveryService = require('./backup/backup-recovery-service');
 const APIDocumentationService = require('./documentation/api-documentation-service');
 const PerformanceOptimizationService = require('./performance/performance-optimization-service');
+const InternationalizationService = require('./i18n/internationalization-service');
 const { getLang, getDict } = require('./i18n/index');
 const { loadClientBundle } = require('./bundles/loader');
 const { diffAndApply } = require('./bundles/apply');
@@ -76,6 +77,7 @@ class ZeroConfigServer {
     this.backupRecovery = new BackupRecoveryService(this.prisma);
     this.apiDocumentation = new APIDocumentationService(this.app, this.prisma);
     this.performanceOptimization = new PerformanceOptimizationService(this.prisma);
+    this.internationalization = new InternationalizationService(this.prisma);
     this.pluginCatalog = new PluginCatalogService();
     this.razorpay = new RazorpayService();
     this.zoho = new ZohoCRMService();
@@ -318,6 +320,9 @@ class ZeroConfigServer {
       
       // Initialize Performance Optimization service
       await this.performanceOptimization.initialize();
+      
+      // Initialize Internationalization service
+      await this.internationalization.initialize();
       
       console.log('✅ Real-time services initialized successfully');
     } catch (error) {
@@ -3304,6 +3309,79 @@ class ZeroConfigServer {
         try {
           const analysis = await this.performanceOptimization.analyzeSlowQueries();
           reply.send(this.errorHandler.successResponse(analysis));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    // Internationalization Routes
+    this.app.get('/api/i18n/languages', {
+      handler: async (request, reply) => {
+        try {
+          const languages = this.internationalization.getSupportedLanguages().map(lang => ({
+            code: lang,
+            name: this.internationalization.getLanguageName(lang)
+          }));
+          reply.send(this.errorHandler.successResponse(languages));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/i18n/translations/:language', {
+      handler: async (request, reply) => {
+        try {
+          const { language } = request.params;
+          const translations = this.internationalization.translations.get(language);
+          reply.send(this.errorHandler.successResponse(translations));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/i18n/voice-commands/:language', {
+      handler: async (request, reply) => {
+        try {
+          const { language } = request.params;
+          const commands = this.internationalization.getLocalizedVoiceCommands(language);
+          reply.send(this.errorHandler.successResponse(commands));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.post('/api/i18n/user-language', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'user']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const { language } = request.body;
+          const userId = request.user.id;
+          
+          await this.internationalization.setUserLanguagePreference(userId, language);
+          reply.send(this.errorHandler.successResponse(null, 'Language preference updated'));
+        } catch (error) {
+          throw error;
+        }
+      }
+    });
+
+    this.app.get('/api/i18n/user-language', {
+      preHandler: [
+        this.authMiddleware.verifyToken.bind(this.authMiddleware),
+        this.authMiddleware.requireRole(['admin', 'manager', 'user']).bind(this.authMiddleware)
+      ],
+      handler: async (request, reply) => {
+        try {
+          const userId = request.user.id;
+          const language = await this.internationalization.getUserLanguagePreference(userId);
+          reply.send(this.errorHandler.successResponse({ language }));
         } catch (error) {
           throw error;
         }

@@ -66,6 +66,8 @@ model User {
   password       String?  // Optional for SSO users
   status         String   @default("active")
   lastLoginAt    DateTime?
+  preferredLanguage String? @default("en")
+  timezone       String? @default("UTC")
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
