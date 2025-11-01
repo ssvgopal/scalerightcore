@@ -1,5 +1,4 @@
 // Test setup file
-const { jest } = require('@jest/globals');
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';
@@ -11,21 +10,18 @@ process.env.GOOGLE_MAPS_API_KEY = 'test-google-maps-key';
 process.env.NCDEX_API_KEY = 'test-ncdex-key';
 process.env.AGMARKNET_API_KEY = 'test-agmarknet-key';
 
-// Global test timeout
-jest.setTimeout(30000);
-
-// Suppress console logs during tests unless explicitly needed
+// Mock console for tests
 const originalConsoleLog = console.log;
 const originalConsoleError = console.error;
 
 beforeAll(() => {
-  console.log = jest.fn();
-  console.error = jest.fn();
+  global.console.log = jest.fn();
+  global.console.error = jest.fn();
 });
 
 afterAll(() => {
-  console.log = originalConsoleLog;
-  console.error = originalConsoleError;
+  global.console.log = originalConsoleLog;
+  global.console.error = originalConsoleError;
 });
 
 // Clean up after each test
