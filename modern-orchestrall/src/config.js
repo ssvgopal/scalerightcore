@@ -45,6 +45,26 @@ module.exports = {
     temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
   },
 
+  // S3 Configuration
+  s3: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    region: process.env.AWS_REGION || 'us-east-1',
+    sareeBucket: process.env.S3_SAREE_BUCKET || 'orchestrall-saree-demo',
+    assetBaseUrl: process.env.ASSET_BASE_URL || 'https://d3.amazonaws.com/orchestrall-saree-demo',
+    signedUrlTtl: parseInt(process.env.SIGNED_URL_TTL || '3600'), // 1 hour
+  },
+
+  // Demo Saree Configuration
+  demo: {
+    replicateApiToken: process.env.REPLICATE_API_TOKEN || '',
+    videoProvider: process.env.VIDEO_PROVIDER || 'luma', // 'luma', 'runway', 'pika'
+    lumaApiKey: process.env.LUMA_API_KEY || '',
+    runwayApiKey: process.env.RUNWAY_API_KEY || '',
+    pikaApiKey: process.env.PIKA_API_KEY || '',
+    depthProvider: process.env.DEPTH_PROVIDER || 'local', // 'local', 'cloud'
+  },
+
   // CORS Configuration
   cors: {
     origins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:3001'],

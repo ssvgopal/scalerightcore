@@ -76,6 +76,8 @@ async function registerPlugins() {
         { name: 'organizations', description: 'Organization management' },
         { name: 'users', description: 'User management' },
         { name: 'health', description: 'Health checks' },
+        { name: 'Demo', description: 'Demo endpoints' },
+        { name: 'Saree', description: 'Saree demo endpoints' },
       ],
     },
   });
@@ -507,6 +509,10 @@ app.get('/api/health', async (request, reply) => {
     version: config.deployment.version,
   };
 });
+
+// Register demo saree routes
+const demoSareeRoutes = require('./routes/demo-saree-routes');
+app.register(demoSareeRoutes, { prisma: database.client });
 
 // Start server
 async function start() {
