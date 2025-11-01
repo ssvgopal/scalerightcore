@@ -4,7 +4,7 @@ const { z } = require('zod');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 const database = require('../../database');
-const S3StorageService = require('./storage');
+const LocalStorageService = require('./storage');
 const ReplicateProvider = require('./providers/replicate');
 const VideoProvider = require('./providers/video');
 const DepthProvider = require('./providers/depth');
@@ -38,7 +38,7 @@ const depthmapSchema = z.object({
 
 class SareeService {
   constructor() {
-    this.storage = new S3StorageService();
+    this.storage = new LocalStorageService();
     this.replicateProvider = new ReplicateProvider();
     this.videoProvider = new VideoProvider();
     this.depthProvider = new DepthProvider();
@@ -172,7 +172,7 @@ class SareeService {
 
       // Generate signed URLs
       const signedUrls = await Promise.all(
-        tryOnUrls.map(url => this.storage.getSignedUrl(url.split('/').pop()))
+        tryOnUrls.map(url => this.storage.getPublicUrl(url.split('/').pop()))
       );
 
       return {
@@ -272,7 +272,7 @@ class SareeService {
       });
 
       // Generate signed URL
-      const signedUrl = await this.storage.getSignedUrl(videoKey);
+      const signedUrl = await this.storage.getPublicUrl(videoKey);
 
       return {
         jobId: videoResult.jobId,
@@ -371,8 +371,8 @@ class SareeService {
       });
 
       // Generate signed URLs
-      const depthSignedUrl = await this.storage.getSignedUrl(depthKey);
-      const normalsSignedUrl = await this.storage.getSignedUrl(normalsKey);
+      const depthSignedUrl = await this.storage.getPublicUrl(depthKey);
+      const normalsSignedUrl = await this.storage.getPublicUrl(normalsKey);
 
       return {
         depthUrl: depthSignedUrl,
@@ -416,7 +416,7 @@ class SareeService {
       
       if (asset.urls.source) {
         const key = asset.urls.source.split('/').pop();
-        urls.source = await this.storage.getSignedUrl(`saree/${assetId}/${key}`);
+        signedUrls.source = await this.storage.getPublicUrl(`saree/${assetId}/${key}`);
       }
 
       if (asset.urls.tryon && asset.urls.tryon.length > 0) {
@@ -424,31 +424,31 @@ class SareeService {
         for (let i = 0; i < asset.urls.tryon.length; i++) {
           const url = asset.urls.tryon[i];
           const key = url.split('/').pop();
-          const signedUrl = await this.storage.getSignedUrl(`saree/${assetId}/tryon/${key}`);
-          urls.tryon.push(signedUrl);
+          const signedUrl = await this.storage.getPublicUrl(`saree/${assetId}/tryon/${key}`);
+          signedUrls.tryon.push(signedUrl);
         }
       }
 
       if (asset.urls.video) {
         const key = asset.urls.video.split('/').pop();
-        urls.video = await this.storage.getSignedUrl(`saree/${assetId}/video/${key}`);
+        urls.video = await this.storage.getPublicUrl(`saree/${assetId}/video/${key}`);
       }
 
       if (asset.urls.depth) {
         const key = asset.urls.depth.split('/').pop();
-        urls.depth = await this.storage.getSignedUrl(`saree/${assetId}/depth/${key}`);
+        urls.depth = await this.storage.getPublicUrl(`saree/${assetId}/depth/${key}`);
       }
 
       if (asset.urls.normals) {
         const key = asset.urls.normals.split('/').pop();
-        urls.normals = await this.storage.getSignedUrl(`saree/${assetId}/depth/${key}`);
+        urls.normals = await this.storage.getPublicUrl(`saree/${assetId}/depth/${key}`);
       }
 
       return {
         assetId,
         kind: asset.kind,
         status: asset.status,
-        urls,
+        urls: signedUrls,
         meta: asset.meta,
         createdAt: asset.createdAt,
         updatedAt: asset.updatedAt,

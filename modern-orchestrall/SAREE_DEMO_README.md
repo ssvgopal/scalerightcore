@@ -56,10 +56,10 @@ The implementation provides a complete Fastify backend with the following endpoi
 
 ### Environment Variables
 ```bash
-# S3 Configuration
-S3_SAREE_BUCKET=orchestrall-saree-demo
-ASSET_BASE_URL=https://d3.amazonaws.com/orchestrall-saree-demo
-SIGNED_URL_TTL=3600
+# Local Storage Configuration
+STORAGE_PROVIDER=local
+STORAGE_PATH=./uploads
+ASSET_BASE_URL=http://localhost:3000/uploads
 
 # Demo Configuration
 REPLICATE_API_TOKEN=your-replicate-api-token
@@ -68,6 +68,12 @@ LUMA_API_KEY=your-luma-api-key
 RUNWAY_API_KEY=your-runway-api-key
 PIKA_API_KEY=your-pika-api-key
 DEPTH_PROVIDER=local
+
+# AWS S3 Configuration (optional, for production)
+AWS_ACCESS_KEY_ID=your-aws-access-key
+AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+AWS_REGION=us-east-1
+S3_SAREE_BUCKET=orchestrall-saree-demo
 ```
 
 ## Features
@@ -91,10 +97,11 @@ DEPTH_PROVIDER=local
 - Interactive canvas with hover/drag parallax
 
 ### Storage & Delivery
-- S3 storage with signed URLs
+- Local file storage with public URLs
 - Automatic file organization by asset ID
 - Secure URL generation with TTL
-- CDN-ready asset URLs
+- Easy deployment without external dependencies
+- S3-compatible interface for future migration
 
 ## Testing
 
@@ -164,10 +171,11 @@ const embed = await fetch(`/demo/saree/embed/${assetId}`, {
 ## Deployment Notes
 
 - Requires PostgreSQL with Asset model migration
-- S3 bucket configuration for file storage
-- API keys for external providers
+- Local file storage (no external dependencies needed)
+- API keys for external providers (Replicate, Video providers)
 - Environment-specific configuration
 - Monitoring and logging integration
+- Storage directory automatically created
 
 ## Future Enhancements
 

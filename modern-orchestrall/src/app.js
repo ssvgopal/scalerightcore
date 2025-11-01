@@ -1,5 +1,6 @@
 // src/app.js - Complete Orchestrall Platform Implementation with Commercial Features
 const fastify = require('fastify');
+const path = require('path');
 const config = require('./config');
 const logger = require('./utils/logger');
 const database = require('./database');
@@ -88,6 +89,13 @@ async function registerPlugins() {
       docExpansion: 'full',
       deepLinking: false,
     },
+  });
+
+  // Static file serving for uploads
+  await app.register(require('@fastify/static'), {
+    root: path.join(process.cwd(), config.storage.path || './uploads'),
+    prefix: '/uploads/',
+    decorateReply: false,
   });
 }
 

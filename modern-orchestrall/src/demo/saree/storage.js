@@ -1,45 +1,52 @@
-// src/demo/saree/storage.js - S3 Storage Service for Saree Demo
-const AWS = require('aws-sdk');
+// src/demo/saree/storage.js - Local File Storage Service for Saree Demo
+const fs = require('fs').promises;
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 
-class S3StorageService {
+class LocalStorageService {
   constructor() {
-    this.s3 = new AWS.S3({
-      accessKeyId: config.s3.accessKeyId,
-      secretAccessKey: config.s3.secretAccessKey,
-      region: config.s3.region,
-    });
-    this.bucket = config.s3.sareeBucket;
+    this.baseDir = process.env.STORAGE_PATH || './uploads';
+    this.baseUrl = process.env.ASSET_BASE_URL || 'http://localhost:3000/uploads';
   }
 
-  // Upload file to S3
+  async ensureDir(dirPath) {
+    try {
+      await fs.access(dirPath);
+    } catch (error) {
+      await fs.mkdir(dirPath, { recursive: true });
+    }
+  }
+
+  // Upload file to local storage
   async uploadFile(key, buffer, contentType) {
     try {
-      const params = {
-        Bucket: this.bucket,
-        Key: key,
-        Body: buffer,
-        ContentType: contentType,
-      };
-
-      const result = await this.s3.upload(params).promise();
+      const filePath = path.join(this.baseDir, key);
+      const dir = path.dirname(filePath);
       
-      logger.info('S3 upload successful', {
+      // Ensure directory exists
+      await this.ensureDir(dir);
+      
+      // Write file
+      await fs.writeFile(filePath, buffer);
+      
+      const location = `${this.baseUrl}/${key}`;
+      
+      logger.info('Local file upload successful', {
         key,
-        bucket: this.bucket,
-        location: result.Location,
+        filePath,
+        location,
       });
 
-      return result.Location;
+      return location;
     } catch (error) {
-      logger.error('S3 upload failed', { key, error: error.message });
+      logger.error('Local file upload failed', { key, error: error.message });
       throw error;
     }
   }
 
-  // Download file from URL and upload to S3
+  // Download file from URL and upload to local storage
   async downloadAndUpload(imageUrl, assetId) {
     try {
       // Validate URL allowlist
@@ -69,20 +76,16 @@ class S3StorageService {
     }
   }
 
-  // Generate signed URL for S3 object
-  async getSignedUrl(key, ttl = config.s3.signedUrlTtl) {
+  // Get public URL for file
+  async getPublicUrl(key, ttl = 3600) {
     try {
-      const params = {
-        Bucket: this.bucket,
-        Key: key,
-        Expires: ttl,
-      };
-
-      const signedUrl = await this.s3.getSignedUrlPromise('getObject', params);
+      // For local storage, just return the public URL
+      // TTL is ignored since we're not using signed URLs
+      const publicUrl = `${this.baseUrl}/${key}`;
       
-      return signedUrl;
+      return publicUrl;
     } catch (error) {
-      logger.error('Failed to generate signed URL', { key, error: error.message });
+      logger.error('Failed to generate public URL', { key, error: error.message });
       throw error;
     }
   }
@@ -123,19 +126,16 @@ class S3StorageService {
     }
   }
 
-  // Delete file from S3
+  // Delete file from local storage
   async deleteFile(key) {
     try {
-      const params = {
-        Bucket: this.bucket,
-        Key: key,
-      };
-
-      await this.s3.deleteObject(params).promise();
+      const filePath = path.join(this.baseDir, key);
       
-      logger.info('S3 delete successful', { key });
+      await fs.unlink(filePath);
+      
+      logger.info('Local file delete successful', { key, filePath });
     } catch (error) {
-      logger.error('S3 delete failed', { key, error: error.message });
+      logger.error('Local file delete failed', { key, error: error.message });
       throw error;
     }
   }
@@ -143,20 +143,32 @@ class S3StorageService {
   // List files for an asset
   async listAssetFiles(assetId) {
     try {
-      const params = {
-        Bucket: this.bucket,
-        Prefix: `saree/${assetId}/`,
-      };
-
-      const result = await this.s3.listObjectsV2(params).promise();
+      const assetDir = path.join(this.baseDir, 'saree', assetId);
       
-      const files = result.Contents.map(obj => ({
-        key: obj.Key,
-        size: obj.Size,
-        lastModified: obj.LastModified,
-      }));
-
-      return files;
+      try {
+        const files = await fs.readdir(assetDir, { recursive: true });
+        
+        const fileList = [];
+        for (const file of files) {
+          const filePath = path.join(assetDir, file);
+          const stats = await fs.stat(filePath);
+          
+          if (stats.isFile()) {
+            fileList.push({
+              key: `saree/${assetId}/${file}`,
+              size: stats.size,
+              lastModified: stats.mtime,
+            });
+          }
+        }
+        
+        return fileList;
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          return []; // Directory doesn't exist yet
+        }
+        throw error;
+      }
     } catch (error) {
       logger.error('Failed to list asset files', { assetId, error: error.message });
       throw error;
@@ -164,4 +176,5 @@ class S3StorageService {
   }
 }
 
-module.exports = S3StorageService;
+// Export as LocalStorageService but maintain S3StorageService interface for compatibility
+module.exports = LocalStorageService;

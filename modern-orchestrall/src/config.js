@@ -45,13 +45,19 @@ module.exports = {
     temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.7'),
   },
 
-  // S3 Configuration
+  // Local Storage Configuration
+  storage: {
+    provider: process.env.STORAGE_PROVIDER || 'local',
+    path: process.env.STORAGE_PATH || './uploads',
+  },
+
+  // S3 Configuration (for future use)
   s3: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
     region: process.env.AWS_REGION || 'us-east-1',
     sareeBucket: process.env.S3_SAREE_BUCKET || 'orchestrall-saree-demo',
-    assetBaseUrl: process.env.ASSET_BASE_URL || 'https://d3.amazonaws.com/orchestrall-saree-demo',
+    assetBaseUrl: process.env.ASSET_BASE_URL || 'http://localhost:3000/uploads',
     signedUrlTtl: parseInt(process.env.SIGNED_URL_TTL || '3600'), // 1 hour
   },
 

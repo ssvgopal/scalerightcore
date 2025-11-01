@@ -1,11 +1,11 @@
 // tests/unit/saree-storage.test.js - Unit Tests for Saree Storage Service
-const S3StorageService = require('../../src/demo/saree/storage');
+const LocalStorageService = require('../../src/demo/saree/storage');
 
-describe('S3StorageService', () => {
+describe('LocalStorageService', () => {
   let storageService;
 
   beforeAll(() => {
-    storageService = new S3StorageService();
+    storageService = new LocalStorageService();
   });
 
   describe('URL validation', () => {
