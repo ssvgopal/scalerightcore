@@ -1,0 +1,45 @@
+id: cms/storytelling
+name: Storytelling CMS
+version: 1.0.0
+description: Content management system for farmer stories with multimedia support and publishing workflow
+category: cms
+capabilities:
+  - content-management
+  - multimedia-support
+  - story-templates
+  - publishing-workflow
+  - analytics
+  - search-engine
+configSchema:
+  storageBucket:
+    type: string
+    required: false
+    default: "orchestrall-stories"
+    description: Cloud storage bucket for media files
+  cdnUrl:
+    type: string
+    required: false
+    default: "https://cdn.orchestrall.com"
+    description: CDN URL for media delivery
+  elasticsearchUrl:
+    type: string
+    required: false
+    default: "http://localhost:9200"
+    description: Elasticsearch URL for search
+  maxFileSize:
+    type: number
+    required: false
+    default: 10485760
+    description: Maximum file size in bytes (10MB)
+  allowedFormats:
+    type: array
+    required: false
+    default: ["jpg", "jpeg", "png", "gif", "mp4", "webm", "mp3", "wav"]
+    description: Allowed media file formats
+dependencies:
+  - "multer"
+  - "sharp"
+  - "fluent-ffmpeg"
+  - "elasticsearch"
+  - "aws-sdk"
+  - "cloudinary"

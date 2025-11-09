@@ -1,0 +1,36 @@
+# clients/kisaansay/plugins.yaml
+enabledPlugins:
+  - id: ecommerce/shopify
+    config:
+      shopName: kisaansay-farm.myshopify.com
+      accessToken: shpat_YOUR_KISAANSAY_SHOPIFY_ACCESS_TOKEN
+      webhookSecret: whsec_YOUR_KISAANSAY_SHOPIFY_WEBHOOK_SECRET
+  - id: payments/razorpay
+    config:
+      keyId: rzp_test_YOUR_KISAANSAY_RAZORPAY_KEY_ID
+      keySecret: YOUR_KISAANSAY_RAZORPAY_KEY_SECRET
+      webhookSecret: YOUR_KISAANSAY_RAZORPAY_WEBHOOK_SECRET
+      environment: sandbox
+      currency: INR
+  - id: crm/zoho
+    config:
+      clientId: YOUR_KISAANSAY_ZOHO_CLIENT_ID
+      clientSecret: YOUR_KISAANSAY_ZOHO_CLIENT_SECRET
+      refreshToken: YOUR_KISAANSAY_ZOHO_REFRESH_TOKEN
+      environment: sandbox
+      dataCenter: com
+  - id: cms/storytelling
+    config:
+      storageBucket: "kisaansay-stories"
+      cdnUrl: "https://cdn.kisaansay.com"
+      elasticsearchUrl: "http://localhost:9200"
+      maxFileSize: 10485760
+      allowedFormats: ["jpg", "jpeg", "png", "gif", "mp4", "webm", "mp3", "wav"]
+  - id: dashboard/farmer
+    config:
+      weatherApiKey: YOUR_KISAANSAY_OPENWEATHER_API_KEY
+      weatherApiUrl: "https://api.openweathermap.org/data/2.5/"
+      commodityApiKey: YOUR_KISAANSAY_NCDEX_API_KEY
+      commodityApiUrl: "https://api.ncdex.com/v1/"
+      updateInterval: 300000
+      maxHistoryDays: 365

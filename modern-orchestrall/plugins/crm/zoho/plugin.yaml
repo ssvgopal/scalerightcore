@@ -1,0 +1,44 @@
+# plugins/crm/zoho/plugin.yaml
+id: crm/zoho
+name: Zoho CRM Integration
+version: 1.0.0
+description: Integrates with Zoho CRM for customer management, lead tracking, and sales pipeline management.
+category: crm
+capabilities:
+  - customer-sync
+  - lead-management
+  - deal-tracking
+  - contact-management
+  - sales-pipeline
+  - custom-field-mapping
+configSchema:
+  clientId:
+    type: string
+    required: true
+    description: Zoho CRM Client ID
+  clientSecret:
+    type: string
+    required: true
+    secret: true
+    description: Zoho CRM Client Secret
+  refreshToken:
+    type: string
+    required: true
+    secret: true
+    description: Zoho CRM Refresh Token
+  environment:
+    type: string
+    required: false
+    default: "sandbox"
+    enum: ["sandbox", "production"]
+    description: Zoho CRM environment
+  dataCenter:
+    type: string
+    required: false
+    default: "com"
+    description: Zoho data center (com, eu, in, au)
+  syncInterval:
+    type: number
+    required: false
+    default: 300000
+    description: Sync interval in milliseconds (5 minutes)

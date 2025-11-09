@@ -1,0 +1,1283 @@
+# OpenAPI 3.0 Specification for Orchestrall Platform
+openapi: 3.0.3
+info:
+  title: Orchestrall AI Platform API
+  description: |
+    # Orchestrall AI Platform API
+    
+    A comprehensive multi-tenant AI orchestration platform that provides:
+    - Universal CRUD operations for all entities
+    - Real-time WebSocket updates
+    - Plugin-based architecture
+    - Multi-tenant support
+    - Advanced analytics and monitoring
+    
+    ## Authentication
+    
+    The API uses JWT (JSON Web Token) for authentication. Include the token in the Authorization header:
+    
+    ```
+    Authorization: Bearer <your-jwt-token>
+    ```
+    
+    ## Rate Limiting
+    
+    API requests are rate limited per endpoint:
+    - General endpoints: 30 requests per minute
+    - API endpoints: 10 requests per second
+    - Authentication endpoints: 1 request per second
+    
+    ## Multi-tenancy
+    
+    All operations are automatically scoped to the authenticated user's organization.
+    
+  version: 2.0.0
+  contact:
+    name: Orchestrall AI Support
+    email: support@orchestrall.ai
+    url: https://orchestrall.ai/support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://orchestrall.ai/terms
+
+servers:
+  - url: https://api.orchestrall.ai/v2
+    description: Production server
+  - url: https://staging-api.orchestrall.ai/v2
+    description: Staging server
+  - url: http://localhost:3000
+    description: Development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Entities
+    description: Universal CRUD operations for all entities
+  - name: Plugins
+    description: Plugin management and execution
+  - name: Analytics
+    description: Analytics and reporting endpoints
+  - name: WebSocket
+    description: Real-time WebSocket connections
+  - name: Admin
+    description: Administrative operations
+
+paths:
+  # Health Check Endpoints
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Basic health check
+      description: Returns the basic health status of the application
+      responses:
+        '200':
+          description: Application is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2025-01-20T10:30:00Z"
+                  uptime:
+                    type: number
+                    example: 3600
+                  version:
+                    type: string
+                    example: "2.0.0"
+        '500':
+          description: Application is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health/database:
+    get:
+      tags:
+        - Health
+      summary: Database health check
+      description: Returns the database connection status
+      responses:
+        '200':
+          description: Database is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  database:
+                    type: string
+                    example: connected
+                  responseTime:
+                    type: number
+                    example: 15
+        '500':
+          description: Database is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health/redis:
+    get:
+      tags:
+        - Health
+      summary: Redis health check
+      description: Returns the Redis cache status
+      responses:
+        '200':
+          description: Redis is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  redis:
+                    type: string
+                    example: connected
+                  responseTime:
+                    type: number
+                    example: 5
+        '500':
+          description: Redis is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health/full:
+    get:
+      tags:
+        - Health
+      summary: Full system health check
+      description: Returns comprehensive system health status
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  services:
+                    type: object
+                    properties:
+                      database:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: healthy
+                          responseTime:
+                            type: number
+                            example: 15
+                      redis:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: healthy
+                          responseTime:
+                            type: number
+                            example: 5
+                      websocket:
+                        type: object
+                        properties:
+                          status:
+                            type: string
+                            example: healthy
+                          connections:
+                            type: number
+                            example: 25
+                  system:
+                    type: object
+                    properties:
+                      cpu:
+                        type: number
+                        example: 45.2
+                      memory:
+                        type: number
+                        example: 67.8
+                      disk:
+                        type: number
+                        example: 23.1
+        '500':
+          description: System is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Authentication Endpoints
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and return JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: admin@orchestrall.com
+                password:
+                  type: string
+                  format: password
+                  example: admin123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  user:
+                    $ref: '#/components/schemas/User'
+                  expiresIn:
+                    type: number
+                    example: 3600
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate user session
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logout successful
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh JWT token
+      description: Get a new JWT token using refresh token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                  expiresIn:
+                    type: number
+                    example: 3600
+        '401':
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Entity Management Endpoints
+  /api/entities:
+    get:
+      tags:
+        - Entities
+      summary: Get all available entities
+      description: Returns a list of all available entity types
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of available entities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: string
+                    example: ["user", "organization", "product", "order"]
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/{entityName}:
+    get:
+      tags:
+        - Entities
+      summary: Get entities
+      description: Retrieve entities with pagination, filtering, and sorting
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+        - name: page
+          in: query
+          description: Page number for pagination
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: search
+          in: query
+          description: Search term
+          schema:
+            type: string
+        - name: sortField
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+        - name: sortOrder
+          in: query
+          description: Sort order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: filter
+          in: query
+          description: JSON string for complex filtering
+          schema:
+            type: string
+        - name: include
+          in: query
+          description: Comma-separated list of relations to include
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of entities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+                  total:
+                    type: integer
+                    example: 150
+                  page:
+                    type: integer
+                    example: 1
+                  limit:
+                    type: integer
+                    example: 10
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entity type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Entities
+      summary: Create entity
+      description: Create a new entity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '201':
+          description: Entity created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/{entityName}/{id}:
+    get:
+      tags:
+        - Entities
+      summary: Get entity by ID
+      description: Retrieve a specific entity by its ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+        - name: id
+          in: path
+          required: true
+          description: Entity ID
+          schema:
+            type: string
+            example: "123e4567-e89b-12d3-a456-426614174000"
+        - name: include
+          in: query
+          description: Comma-separated list of relations to include
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Entity found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Entities
+      summary: Update entity
+      description: Update an existing entity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+        - name: id
+          in: path
+          required: true
+          description: Entity ID
+          schema:
+            type: string
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Entity updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Entities
+      summary: Delete entity
+      description: Delete an entity
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+        - name: id
+          in: path
+          required: true
+          description: Entity ID
+          schema:
+            type: string
+            example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Entity deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "User with ID 123e4567-e89b-12d3-a456-426614174000 deleted successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Bulk Operations
+  /api/{entityName}/bulk:
+    post:
+      tags:
+        - Entities
+      summary: Bulk create entities
+      description: Create multiple entities in a single request
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                  minItems: 1
+                  maxItems: 100
+      responses:
+        '201':
+          description: Entities created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    put:
+      tags:
+        - Entities
+      summary: Bulk update entities
+      description: Update multiple entities in a single request
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - updates
+              properties:
+                updates:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - id
+                      - data
+                    properties:
+                      id:
+                        type: string
+                      data:
+                        type: object
+                  minItems: 1
+                  maxItems: 50
+      responses:
+        '200':
+          description: Entities updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      type: object
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Entities
+      summary: Bulk delete entities
+      description: Delete multiple entities in a single request
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: entityName
+          in: path
+          required: true
+          description: Name of the entity type
+          schema:
+            type: string
+            example: user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ids
+              properties:
+                ids:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                  maxItems: 50
+      responses:
+        '200':
+          description: Entities deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Bulk delete for user successful"
+        '400':
+          description: Invalid input data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Plugin Management Endpoints
+  /api/plugins:
+    get:
+      tags:
+        - Plugins
+      summary: Get all plugins
+      description: Retrieve list of all available plugins
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of plugins
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Plugin'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/plugins/{pluginId}:
+    get:
+      tags:
+        - Plugins
+      summary: Get plugin details
+      description: Retrieve detailed information about a specific plugin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pluginId
+          in: path
+          required: true
+          description: Plugin identifier
+          schema:
+            type: string
+            example: "shopify-integration"
+      responses:
+        '200':
+          description: Plugin details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Plugin'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Plugin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Plugins
+      summary: Enable plugin
+      description: Enable a plugin for the current organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pluginId
+          in: path
+          required: true
+          description: Plugin identifier
+          schema:
+            type: string
+            example: "shopify-integration"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                config:
+                  type: object
+                  description: Plugin configuration
+      responses:
+        '200':
+          description: Plugin enabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Plugin'
+        '400':
+          description: Invalid plugin configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Plugins
+      summary: Disable plugin
+      description: Disable a plugin for the current organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: pluginId
+          in: path
+          required: true
+          description: Plugin identifier
+          schema:
+            type: string
+            example: "shopify-integration"
+      responses:
+        '200':
+          description: Plugin disabled successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Plugin disabled successfully"
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Plugin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # Analytics Endpoints
+  /api/analytics/dashboard:
+    get:
+      tags:
+        - Analytics
+      summary: Get dashboard analytics
+      description: Retrieve analytics data for the dashboard
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      totalUsers:
+                        type: integer
+                        example: 1234
+                      activePlugins:
+                        type: integer
+                        example: 7
+                      pendingApprovals:
+                        type: integer
+                        example: 3
+                      systemHealth:
+                        type: number
+                        example: 99.9
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/analytics/reports:
+    get:
+      tags:
+        - Analytics
+      summary: Get analytics reports
+      description: Retrieve various analytics reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          description: Report type
+          schema:
+            type: string
+            enum: [user-activity, system-performance, plugin-usage, security-audit]
+        - name: period
+          in: query
+          description: Time period for the report
+          schema:
+            type: string
+            enum: [day, week, month, quarter, year]
+            default: month
+        - name: format
+          in: query
+          description: Report format
+          schema:
+            type: string
+            enum: [json, csv, pdf]
+            default: json
+      responses:
+        '200':
+          description: Analytics report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        email:
+          type: string
+          format: email
+          example: "admin@orchestrall.com"
+        firstName:
+          type: string
+          example: "John"
+        lastName:
+          type: string
+          example: "Doe"
+        role:
+          type: string
+          enum: [USER, ADMIN, MANAGER]
+          example: "ADMIN"
+        isActive:
+          type: boolean
+          example: true
+        organizationId:
+          type: string
+          example: "org-123"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "org-123"
+        name:
+          type: string
+          example: "Acme Corporation"
+        slug:
+          type: string
+          example: "acme-corp"
+        description:
+          type: string
+          example: "Leading technology company"
+        tier:
+          type: string
+          enum: [basic, premium, enterprise]
+          example: "premium"
+        status:
+          type: string
+          enum: [active, inactive, pending]
+          example: "active"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+
+    Plugin:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "shopify-integration"
+        name:
+          type: string
+          example: "Shopify Integration"
+        version:
+          type: string
+          example: "1.2.0"
+        description:
+          type: string
+          example: "E-commerce platform integration"
+        category:
+          type: string
+          example: "ecommerce"
+        status:
+          type: string
+          enum: [enabled, disabled, error]
+          example: "enabled"
+        config:
+          type: object
+          description: Plugin configuration
+        health:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "healthy"
+            lastCheck:
+              type: string
+              format: date-time
+              example: "2025-01-20T10:30:00Z"
+            responseTime:
+              type: number
+              example: 150
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid request"
+        message:
+          type: string
+          example: "The request could not be processed"
+        code:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"
+        path:
+          type: string
+          example: "/api/users"
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 10
+        total:
+          type: integer
+          example: 150
+        totalPages:
+          type: integer
+          example: 15
+
+    WebSocketMessage:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "entity_created"
+        data:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-01-20T10:30:00Z"

@@ -1,0 +1,59 @@
+{
+  "name": "orchestrall-modern",
+  "version": "2.0.0",
+  "description": "Next-generation enterprise platform with hybrid deployment and agentic AI",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "src/*"
+  ],
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "test:watch": "turbo test:watch",
+    "clean": "turbo clean && rm -rf node_modules",
+    "db:generate": "turbo db:generate",
+    "db:migrate": "turbo db:migrate",
+    "db:seed": "turbo db:seed",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "k8s:deploy": "kubectl apply -f deployment/kubernetes/",
+    "k8s:destroy": "kubectl delete -f deployment/kubernetes/",
+    "observability:up": "cd deployment/observability && docker-compose up -d",
+    "observability:down": "cd deployment/observability && docker-compose down",
+    "observability:logs": "cd deployment/observability && docker-compose logs -f",
+    "agent:build": "turbo agent:build",
+    "agent:test": "turbo agent:test"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.7.0",
+    "@opentelemetry/api-logs": "^0.48.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.45.0",
+    "@opentelemetry/exporter-jaeger": "^1.21.0",
+    "@opentelemetry/exporter-otlp-grpc": "^0.48.0",
+    "@opentelemetry/exporter-otlp-http": "^0.48.0",
+    "@opentelemetry/exporter-prometheus": "^0.48.0",
+    "@opentelemetry/sdk-logs": "^0.48.0",
+    "@opentelemetry/sdk-metrics": "^1.21.0",
+    "@opentelemetry/sdk-node": "^0.48.0",
+    "@opentelemetry/sdk-trace-node": "^1.21.0",
+    "@opentelemetry/semantic-conventions": "^1.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "turbo": "^1.12.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "packageManager": "npm@9.0.0"
+}

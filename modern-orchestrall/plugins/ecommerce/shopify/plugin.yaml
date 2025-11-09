@@ -1,0 +1,42 @@
+name: Shopify Connector
+version: 1.0.0
+description: Complete Shopify e-commerce integration with product, order, and inventory sync
+category: ecommerce
+capabilities:
+  - product-sync
+  - order-sync
+  - inventory-sync
+  - webhook-handling
+  - rate-limiting
+dependencies: []
+conflicts: []
+compatible:
+  - razorpay-payment
+  - zoho-crm
+configSchema:
+  shopName:
+    type: string
+    required: true
+    description: Shopify shop name (e.g., "my-shop")
+  apiKey:
+    type: string
+    required: true
+    secret: true
+    description: Shopify Admin API access token
+  apiSecret:
+    type: string
+    required: true
+    secret: true
+    description: Shopify API secret key
+  webhookSecret:
+    type: string
+    required: true
+    secret: true
+    description: Webhook verification secret
+pricing:
+  tier: premium
+  cost: "$200/month"
+  features:
+    - unlimited-sync
+    - real-time-webhooks
+    - bulk-operations

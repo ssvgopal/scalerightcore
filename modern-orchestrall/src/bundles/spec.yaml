@@ -1,0 +1,23 @@
+version: 1
+bundle:
+  id: string   # unique bundle id
+  name: string # human readable name
+  version: string # semver
+  description: string
+  plugins:      # list of plugin identifiers to enable for the client
+    - id: string         # e.g. ai/sarvam, cms/storytelling, inventory/multi-store
+      config: {}         # plugin-specific config/overrides
+  env: {}       # env overrides merged into runtime for this client
+  featureFlags: {}  # boolean flags
+  permissions:      # coarse-grained permissions
+    - resource: string
+      actions: [read, write, admin]
+  routes:          # optional route toggles or prefixes
+    - path: string
+      enabled: boolean
+  webhooks:        # external webhooks to register for this client
+    - event: string
+      url: string
+      secret: string
+
+

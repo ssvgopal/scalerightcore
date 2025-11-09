@@ -1,0 +1,40 @@
+version: 1
+bundle:
+  id: kankatala-core
+  name: Kankatala Core Commerce
+  version: 1.0.0
+  description: Core retail, inventory, payments, and analytics for Kankatala.
+  plugins:
+    - id: inventory/multi-store
+      config:
+        reorderThreshold: 10
+    - id: ai/sarvam
+      config:
+        language: en
+    - id: cms/storytelling
+      config:
+        enableSEO: true
+  env:
+    PAYMENT_PROVIDER: razorpay
+    SEARCH_BACKEND: elasticsearch
+  featureFlags:
+    enableRefunds: true
+    enableReorderRules: true
+  permissions:
+    - resource: product
+      actions: [read, write]
+    - resource: order
+      actions: [read, write]
+    - resource: refund
+      actions: [read]
+  routes:
+    - path: /api/product
+      enabled: true
+    - path: /api/order
+      enabled: true
+  webhooks:
+    - event: payment.succeeded
+      url: https://hooks.kankatala.com/payments/succeeded
+      secret: ${RAZORPAY_WEBHOOK_SECRET}
+
+

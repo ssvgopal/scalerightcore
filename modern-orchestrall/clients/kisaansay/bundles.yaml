@@ -1,0 +1,31 @@
+version: 1
+bundle:
+  id: kisaansay-agri
+  name: Kisaansay Agri Intelligence
+  version: 1.0.0
+  description: Agri advisory, storytelling CMS, and farmer dashboard.
+  plugins:
+    - id: cms/storytelling
+      config:
+        languages: [hi, te]
+    - id: dashboard/farmer
+      config:
+        showWeather: true
+    - id: ai/sarvam
+      config:
+        language: hi
+  env:
+    WEATHER_PROVIDER: openweathermap
+  featureFlags:
+    enableMarketPrices: true
+  permissions:
+    - resource: story
+      actions: [read, write]
+    - resource: farmer
+      actions: [read]
+  routes:
+    - path: /api/story
+      enabled: true
+  webhooks: []
+
+

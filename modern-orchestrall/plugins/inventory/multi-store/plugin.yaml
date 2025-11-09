@@ -1,0 +1,44 @@
+id: inventory/multi-store
+name: Multi-Store Inventory Management
+version: 1.0.0
+description: Comprehensive inventory management system for multiple store locations with transfer management and reorder automation
+category: inventory
+capabilities:
+  - store-management
+  - inventory-tracking
+  - transfer-management
+  - reorder-automation
+  - performance-analytics
+  - barcode-scanning
+  - real-time-updates
+configSchema:
+  reorderCheckInterval:
+    type: number
+    required: false
+    default: 3600000
+    description: Reorder check interval in milliseconds (1 hour)
+  transferApprovalRequired:
+    type: boolean
+    required: false
+    default: true
+    description: Whether transfers require approval
+  lowStockThreshold:
+    type: number
+    required: false
+    default: 10
+    description: Default low stock threshold
+  barcodeApiUrl:
+    type: string
+    required: false
+    default: "https://api.barcode.com/v1/"
+    description: Barcode scanning API URL
+  notificationEmail:
+    type: string
+    required: false
+    description: Email for low stock notifications
+dependencies:
+  - "node-cron"
+  - "qrcode"
+  - "zbar"
+  - "bull"
+  - "redis"

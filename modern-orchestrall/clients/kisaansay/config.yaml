@@ -1,0 +1,15 @@
+client:
+  id: kisaansay
+  name: Kisaansay AgriTech Platform
+  tier: enterprise
+  description: Farmer-focused agricultural technology platform with profit-sharing
+features:
+  farmerManagement: true
+  storytellingCMS: true
+  profitSharing: true
+  analytics: true
+settings:
+  timezone: "Asia/Kolkata"
+  currency: "INR"
+  language: "hi"  # Hindi
+  defaultRegion: "north-india"

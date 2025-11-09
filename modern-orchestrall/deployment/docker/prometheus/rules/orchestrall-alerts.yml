@@ -1,0 +1,255 @@
+# Prometheus Alert Rules for Orchestrall Platform
+groups:
+  # Application Health Alerts
+  - name: orchestrall-app-health
+    rules:
+      - alert: ApplicationDown
+        expr: up{job="orchestrall-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: orchestrall-app
+        annotations:
+          summary: "Orchestrall application is down"
+          description: "The Orchestrall application has been down for more than 1 minute."
+
+      - alert: ApplicationHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: orchestrall-app
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 10% for more than 2 minutes."
+
+      - alert: ApplicationHighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: orchestrall-app
+        annotations:
+          summary: "High response time detected"
+          description: "95th percentile response time is above 2 seconds for more than 5 minutes."
+
+  # Database Health Alerts
+  - name: postgres-health
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL database is down"
+          description: "PostgreSQL database has been down for more than 1 minute."
+
+      - alert: PostgreSQLHighConnections
+        expr: pg_stat_database_numbackends / pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "High PostgreSQL connection usage"
+          description: "PostgreSQL connection usage is above 80% for more than 5 minutes."
+
+      - alert: PostgreSQLSlowQueries
+        expr: rate(pg_stat_database_tup_returned[5m]) / rate(pg_stat_database_tup_fetched[5m]) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "Slow PostgreSQL queries detected"
+          description: "PostgreSQL query efficiency is below 10% for more than 10 minutes."
+
+  # Redis Health Alerts
+  - name: redis-health
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis cache is down"
+          description: "Redis cache has been down for more than 1 minute."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is above 80% for more than 5 minutes."
+
+      - alert: RedisHighKeyEvictionRate
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "High Redis key eviction rate"
+          description: "Redis key eviction rate is above 100 keys/second for more than 5 minutes."
+
+  # System Resource Alerts
+  - name: system-resources
+    rules:
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes."
+
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 80% for more than 5 minutes."
+
+      - alert: HighDiskUsage
+        expr: (1 - (node_filesystem_avail_bytes / node_filesystem_size_bytes)) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is above 80% for more than 5 minutes."
+
+  # Network Health Alerts
+  - name: network-health
+    rules:
+      - alert: HighNetworkTraffic
+        expr: rate(node_network_receive_bytes_total[5m]) > 100000000
+        for: 5m
+        labels:
+          severity: warning
+          service: network
+        annotations:
+          summary: "High network traffic detected"
+          description: "Network receive traffic is above 100MB/s for more than 5 minutes."
+
+      - alert: NetworkErrors
+        expr: rate(node_network_receive_errs_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: network
+        annotations:
+          summary: "Network errors detected"
+          description: "Network receive errors are above 10 errors/second for more than 5 minutes."
+
+  # Docker Container Alerts
+  - name: docker-containers
+    rules:
+      - alert: ContainerRestarting
+        expr: rate(container_start_time_seconds[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container restarting frequently"
+          description: "Container has restarted in the last 5 minutes."
+
+      - alert: ContainerHighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container high CPU usage"
+          description: "Container CPU usage is above 80% for more than 5 minutes."
+
+      - alert: ContainerHighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: docker
+        annotations:
+          summary: "Container high memory usage"
+          description: "Container memory usage is above 80% for more than 5 minutes."
+
+  # Elasticsearch Health Alerts
+  - name: elasticsearch-health
+    rules:
+      - alert: ElasticsearchDown
+        expr: up{job="elasticsearch"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: elasticsearch
+        annotations:
+          summary: "Elasticsearch is down"
+          description: "Elasticsearch has been down for more than 1 minute."
+
+      - alert: ElasticsearchClusterRed
+        expr: elasticsearch_cluster_health_status{color="red"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          service: elasticsearch
+        annotations:
+          summary: "Elasticsearch cluster is red"
+          description: "Elasticsearch cluster status is red for more than 1 minute."
+
+      - alert: ElasticsearchClusterYellow
+        expr: elasticsearch_cluster_health_status{color="yellow"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          service: elasticsearch
+        annotations:
+          summary: "Elasticsearch cluster is yellow"
+          description: "Elasticsearch cluster status is yellow for more than 5 minutes."
+
+  # Business Logic Alerts
+  - name: business-logic
+    rules:
+      - alert: HighFailedLogins
+        expr: rate(auth_failed_logins_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: auth
+        annotations:
+          summary: "High failed login attempts"
+          description: "Failed login attempts are above 10 per minute for more than 5 minutes."
+
+      - alert: PluginFailureRate
+        expr: rate(plugin_execution_failures_total[5m]) / rate(plugin_executions_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: plugins
+        annotations:
+          summary: "High plugin failure rate"
+          description: "Plugin failure rate is above 10% for more than 5 minutes."
+
+      - alert: WebSocketConnectionDrop
+        expr: rate(websocket_connections_closed_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: websocket
+        annotations:
+          summary: "High WebSocket connection drops"
+          description: "WebSocket connections are dropping at a rate above 50 per minute for more than 5 minutes."
