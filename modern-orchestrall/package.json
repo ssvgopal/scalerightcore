@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "Modern Orchestrall Platform with Multi-tenant Support",
   "main": "src/app-commercial.js",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "start": "node src/app-commercial.js",
     "start:production": "NODE_ENV=production node src/app-zero-config.js",
@@ -28,9 +31,12 @@
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
     "db:seed": "node src/seed.js",
+    "db:seed:patientflow": "node src/seed-patientflow.js",
     "db:reset": "npx prisma migrate reset",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "dashboard:dev": "npm run dev --workspace=patientflow-dashboard",
+    "dashboard:build": "npm run build --workspace=patientflow-dashboard",
     "deploy:integration": "bash deployment/deploy.sh integration",
     "deploy:staging": "bash deployment/deploy.sh staging",
     "deploy:production": "bash deployment/deploy.sh production",
@@ -77,6 +83,7 @@
     "verbose": true
   },
   "dependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@fastify/cors": "^8.4.0",
     "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^7.2.4",
