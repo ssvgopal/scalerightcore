@@ -3,7 +3,7 @@ FROM node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat sox ffmpeg
 WORKDIR /app
 
 # Copy package files
@@ -39,9 +39,12 @@ COPY --from=builder --chown=orchestrall:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=orchestrall:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=orchestrall:nodejs /app/package*.json ./
 
+# Copy bootstrap script
+COPY --chmod=755 docker/bootstrap.sh /app/docker/bootstrap.sh
+
 # Create necessary directories
-RUN mkdir -p /app/logs /app/uploads /app/backups
-RUN chown -R orchestrall:nodejs /app/logs /app/uploads /app/backups
+RUN mkdir -p /app/logs /app/uploads /app/backups /tmp/gcp-credentials
+RUN chown -R orchestrall:nodejs /app/logs /app/uploads /app/backups /tmp/gcp-credentials
 
 # Switch to non-root user
 USER orchestrall
@@ -58,5 +61,6 @@ ENV HOST=0.0.0.0
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
-# Start the application
+# Start the application with bootstrap script
+ENTRYPOINT ["/app/docker/bootstrap.sh"]
 CMD ["node", "dist/app.js"]

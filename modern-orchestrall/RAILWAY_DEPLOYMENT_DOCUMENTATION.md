@@ -49,6 +49,14 @@ This document provides comprehensive documentation for the Railway.app deploymen
 - **Deployment Workflow**: Git branch to environment mapping
 - **Monitoring Setup**: Railway dashboard and custom monitoring
 
+### **7. PatientFlow Configuration (`deployment/patientflow-env-config.md`)**
+- **AI Providers**: OpenAI Whisper, Claude (Anthropic)
+- **Twilio Integration**: WhatsApp, Voice, SMS messaging
+- **Google Cloud TTS**: Text-to-Speech with automatic credential setup
+- **Session Management**: TTL and phone allowlisting
+- **Secrets Handling**: Best practices for Railway deployment
+- **Bootstrap Script**: Automatic credential file generation from environment variables
+
 ---
 
 ## **💰 COST ANALYSIS**
