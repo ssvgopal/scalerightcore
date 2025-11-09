@@ -48,6 +48,25 @@ const config = {
     temperature: parseFloat(process.env.TEMPERATURE || '0.7'),
   },
 
+  // Voice & Telephony Configuration
+  voice: {
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
+    twilioAssistantNumber: process.env.TWILIO_ASSISTANT_NUMBER || '',
+    defaultOrganizationId: process.env.PATIENTFLOW_DEFAULT_ORGANIZATION_ID || '',
+    recordingCallbackAuthToken: process.env.TWILIO_RECORDING_AUTH_TOKEN || process.env.TWILIO_AUTH_TOKEN || '',
+    gatherTimeout: parseInt(process.env.PATIENTFLOW_GATHER_TIMEOUT || '6'),
+    maxGatherAttempts: parseInt(process.env.PATIENTFLOW_MAX_GATHER_ATTEMPTS || '3'),
+  },
+
+  // Google Cloud Configuration
+  googleCloud: {
+    projectId: process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT || '',
+    ttsLanguageCode: process.env.GCP_TTS_LANGUAGE_CODE || 'en-US',
+    ttsVoiceName: process.env.GCP_TTS_VOICE_NAME || '',
+    ttsSpeakingRate: parseFloat(process.env.GCP_TTS_SPEAKING_RATE || '1.0'),
+  },
+
   // Feature Flags Configuration
   featureFlags: {
     provider: process.env.FEATURE_FLAGS_PROVIDER || 'local',

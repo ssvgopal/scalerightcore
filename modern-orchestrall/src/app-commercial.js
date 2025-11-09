@@ -1387,7 +1387,9 @@ app.get('/api/plugins/health', async (request, reply) => {
 
 // Universal CRUD API Routes
 const universalCRUDRoutes = require('./routes/universal-crud');
+const patientflowVoiceRoutes = require('./patientflow/voice/patientflow-voice-routes');
 app.register(universalCRUDRoutes, { prisma: database.client });
+app.register(patientflowVoiceRoutes, { prisma: database.client });
 
 // Autonomous Platform Manager
 let autonomousPlatformManager = null;

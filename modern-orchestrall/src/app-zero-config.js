@@ -38,6 +38,7 @@ const TenantObservabilityService = require('./observability/tenant-service');
 const ObservabilityService = require('./observability/observability-service');
 const RBACService = require('./security/rbac-service');
 const MultiTenancyService = require('./multitenancy/service');
+const patientflowVoiceRoutes = require('./patientflow/voice/patientflow-voice-routes');
 
 // Security and Validation Services
 const AuthMiddleware = require('./middleware/auth');
@@ -2089,6 +2090,7 @@ class ZeroConfigServer {
 
     // Register Universal CRUD routes
     await this.app.register(universalCRUDRoutes, { prisma: this.prisma, broadcast });
+    await this.app.register(patientflowVoiceRoutes, { prisma: this.prisma });
 
     // Wire notifications to events (example rules)
     this.eventBus.on('crud:create', async (payload) => {
