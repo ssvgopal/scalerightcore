@@ -148,6 +148,36 @@ class MonitoringService {
       registers: [register],
     });
 
+    // PatientFlow metrics
+    this.metrics.patientflowMessagesTotal = new prometheus.Counter({
+      name: 'patientflow_messages_total',
+      help: 'Total number of PatientFlow messages',
+      labelNames: ['channel', 'direction'],
+      registers: [register],
+    });
+
+    this.metrics.patientflowCallsTotal = new prometheus.Counter({
+      name: 'patientflow_calls_total',
+      help: 'Total number of PatientFlow calls',
+      labelNames: ['status'],
+      registers: [register],
+    });
+
+    this.metrics.patientflowBookingsTotal = new prometheus.Counter({
+      name: 'patientflow_bookings_total',
+      help: 'Total number of PatientFlow bookings',
+      labelNames: ['source', 'status'],
+      registers: [register],
+    });
+
+    this.metrics.patientflowCallDuration = new prometheus.Histogram({
+      name: 'patientflow_call_duration_seconds',
+      help: 'Duration of PatientFlow calls in seconds',
+      labelNames: ['status'],
+      buckets: [5, 15, 30, 60, 120, 300, 600, 1800], // 5s to 30min
+      registers: [register],
+    });
+
     logger.info('Monitoring service initialized with Prometheus metrics');
   }
 
@@ -220,6 +250,173 @@ class MonitoringService {
   // Error monitoring
   recordError(type, severity) {
     this.metrics.errorsTotal.inc({ type, severity });
+  }
+
+  // PatientFlow monitoring
+  recordPatientFlowMessage(channel, direction) {
+    this.metrics.patientflowMessagesTotal.inc({ channel, direction });
+  }
+
+  recordPatientFlowCall(status, duration) {
+    this.metrics.patientflowCallsTotal.inc({ status });
+    if (duration !== undefined && duration !== null) {
+      this.metrics.patientflowCallDuration.observe({ status }, duration);
+    }
+  }
+
+  recordPatientFlowBooking(source, status) {
+    this.metrics.patientflowBookingsTotal.inc({ source, status });
+  }
+
+  // PatientFlow health checks
+  async getPatientFlowHealth() {
+    const health = {
+      status: 'healthy',
+      checks: {},
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      // Check Twilio credentials
+      const twilioHealth = await this.checkTwilioHealth();
+      health.checks.twilio = twilioHealth;
+
+      // Check AI provider readiness
+      const aiHealth = await this.checkAIProviderHealth();
+      health.checks.aiProvider = aiHealth;
+
+      // Check Google TTS authentication
+      const ttsHealth = await this.checkGoogleTTSHealth();
+      health.checks.googleTTS = ttsHealth;
+
+      // Determine overall status
+      const hasFailure = Object.values(health.checks).some(check => check.status === 'unhealthy');
+      const hasDegradation = Object.values(health.checks).some(check => check.status === 'degraded');
+      
+      if (hasFailure) {
+        health.status = 'unhealthy';
+      } else if (hasDegradation) {
+        health.status = 'degraded';
+      }
+
+    } catch (error) {
+      logger.error('PatientFlow health check failed', error);
+      health.status = 'unhealthy';
+      health.error = error.message;
+    }
+
+    return health;
+  }
+
+  async checkTwilioHealth() {
+    const check = {
+      status: 'healthy',
+      message: 'Twilio credentials configured',
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      // Check for required Twilio environment variables
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      const phoneNumber = process.env.TWILIO_PHONE_NUMBER;
+
+      if (!accountSid || !authToken || !phoneNumber) {
+        check.status = 'unhealthy';
+        check.message = 'Missing required Twilio credentials (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER)';
+        return check;
+      }
+
+      // Basic credential format validation
+      if (accountSid.startsWith('AC') && accountSid.length === 34 && authToken.length > 0) {
+        check.status = 'healthy';
+        check.message = 'Twilio credentials properly formatted';
+      } else {
+        check.status = 'degraded';
+        check.message = 'Twilio credentials may be incorrectly formatted';
+      }
+
+    } catch (error) {
+      check.status = 'unhealthy';
+      check.message = `Twilio health check error: ${error.message}`;
+    }
+
+    return check;
+  }
+
+  async checkAIProviderHealth() {
+    const check = {
+      status: 'healthy',
+      message: 'AI provider ready',
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      // Check for OpenAI API key
+      const openaiKey = process.env.OPENAI_API_KEY;
+      
+      if (!openaiKey) {
+        check.status = 'unhealthy';
+        check.message = 'Missing OpenAI API key (OPENAI_API_KEY)';
+        return check;
+      }
+
+      // Basic API key format validation
+      if (openaiKey.startsWith('sk-') && openaiKey.length > 40) {
+        check.status = 'healthy';
+        check.message = 'OpenAI API key properly formatted';
+      } else {
+        check.status = 'degraded';
+        check.message = 'OpenAI API key may be incorrectly formatted';
+      }
+
+    } catch (error) {
+      check.status = 'unhealthy';
+      check.message = `AI provider health check error: ${error.message}`;
+    }
+
+    return check;
+  }
+
+  async checkGoogleTTSHealth() {
+    const check = {
+      status: 'healthy',
+      message: 'Google TTS authentication configured',
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      // Check for Google Cloud credentials
+      const googleCredentials = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      const googleKeyJson = process.env.GOOGLE_TTS_KEY_JSON;
+
+      if (!googleCredentials && !googleKeyJson) {
+        check.status = 'unhealthy';
+        check.message = 'Missing Google TTS credentials (GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_TTS_KEY_JSON)';
+        return check;
+      }
+
+      if (googleCredentials) {
+        // Check if credentials file exists (basic validation)
+        const fs = require('fs');
+        if (fs.existsSync(googleCredentials)) {
+          check.status = 'healthy';
+          check.message = 'Google TTS credentials file found';
+        } else {
+          check.status = 'degraded';
+          check.message = 'Google TTS credentials file not found';
+        }
+      } else {
+        check.status = 'healthy';
+        check.message = 'Google TTS JSON credentials configured';
+      }
+
+    } catch (error) {
+      check.status = 'unhealthy';
+      check.message = `Google TTS health check error: ${error.message}`;
+    }
+
+    return check;
   }
 
   // Health check monitoring
