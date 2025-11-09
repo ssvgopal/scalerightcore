@@ -302,6 +302,305 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## 🏥 PatientFlow - Healthcare Appointment System
+
+**PatientFlow** is an AI-powered healthcare appointment management system that enables patients to book, reschedule, and manage appointments via voice calls and WhatsApp messaging. Built with Twilio, Google Cloud TTS, and OpenAI, it provides 24/7 automated patient support.
+
+### Key Features
+
+- 📞 **Voice IVR System**: AI-powered phone appointments with natural language understanding
+- 💬 **WhatsApp Integration**: Self-service booking via WhatsApp messaging
+- 🤖 **AI Conversations**: Context-aware multi-turn conversations with patients
+- 📅 **Smart Scheduling**: Doctor availability management and conflict detection
+- 🔔 **Automated Reminders**: SMS/WhatsApp appointment reminders
+- 📊 **Patient Management**: Complete patient records with preferences and history
+- 🏥 **Multi-Clinic Support**: Manage multiple clinic branches and doctors
+- 🌍 **Multi-Language**: Support for multiple languages and locales
+
+### Required Environment Variables
+
+```bash
+# Twilio Configuration (Voice & WhatsApp)
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token_here
+TWILIO_PHONE_NUMBER=+1234567890
+TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886
+
+# Google Cloud TTS (Text-to-Speech)
+GOOGLE_PROJECT_ID=your-project-id
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+# OR use base64 encoded credentials:
+GOOGLE_SERVICE_ACCOUNT_KEY_BASE64=base64_encoded_json_here
+
+# OpenAI (AI Conversations)
+OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+OPENAI_MODEL=gpt-4-turbo-preview
+```
+
+### Quick Start
+
+```bash
+# 1. Set up environment variables
+cp .env.example .env
+# Edit .env with your Twilio, Google Cloud, and OpenAI credentials
+
+# 2. Run database migrations
+npx prisma migrate deploy
+
+# 3. Seed demo data (clinic, doctors, schedules)
+npx tsx prisma/seed-patientflow.ts
+
+# 4. Start the server
+npm run start
+
+# 5. Test the system
+curl http://localhost:3000/health
+```
+
+### API Examples
+
+#### Health Check
+```bash
+# Basic health check
+curl http://localhost:3000/health
+
+# Expected response:
+# {
+#   "status": "ok",
+#   "timestamp": "2024-01-15T10:30:00.000Z",
+#   "uptime": 3600
+# }
+```
+
+#### Get Available Doctors
+```bash
+curl http://localhost:3000/api/patientflow/doctors \
+  -H "X-Organization-ID: org_demo_clinic"
+
+# Expected response:
+# [
+#   {
+#     "id": "doc_123",
+#     "firstName": "Sarah",
+#     "lastName": "Smith",
+#     "specialty": "General Practice",
+#     "isAvailable": true,
+#     "languages": ["en", "es"]
+#   }
+# ]
+```
+
+#### Check Doctor Availability
+```bash
+curl http://localhost:3000/api/patientflow/doctors/doc_123/availability \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -G \
+  --data-urlencode "date=2024-01-20" \
+  --data-urlencode "duration=30"
+
+# Expected response:
+# {
+#   "date": "2024-01-20",
+#   "slots": [
+#     { "start": "09:00", "end": "09:30", "available": true },
+#     { "start": "09:30", "end": "10:00", "available": true },
+#     { "start": "10:00", "end": "10:30", "available": false }
+#   ]
+# }
+```
+
+#### Book Appointment
+```bash
+curl -X POST http://localhost:3000/api/patientflow/appointments \
+  -H "Content-Type: application/json" \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -d '{
+    "patientPhone": "+15555551234",
+    "patientFirstName": "John",
+    "patientLastName": "Doe",
+    "patientEmail": "john.doe@email.com",
+    "doctorId": "doc_123",
+    "startTime": "2024-01-20T09:00:00Z",
+    "endTime": "2024-01-20T09:30:00Z",
+    "reason": "General checkup",
+    "source": "MANUAL"
+  }'
+
+# Expected response:
+# {
+#   "id": "apt_456",
+#   "status": "BOOKED",
+#   "referenceNumber": "APT-2024-001",
+#   "patient": {
+#     "id": "pat_789",
+#     "firstName": "John",
+#     "lastName": "Doe"
+#   },
+#   "doctor": {
+#     "id": "doc_123",
+#     "name": "Dr. Sarah Smith"
+#   },
+#   "startTime": "2024-01-20T09:00:00Z",
+#   "endTime": "2024-01-20T09:30:00Z"
+# }
+```
+
+#### Get Patient Appointments
+```bash
+curl http://localhost:3000/api/patientflow/patients/phone/+15555551234/appointments \
+  -H "X-Organization-ID: org_demo_clinic"
+
+# Expected response:
+# [
+#   {
+#     "id": "apt_456",
+#     "status": "BOOKED",
+#     "startTime": "2024-01-20T09:00:00Z",
+#     "doctor": {
+#       "name": "Dr. Sarah Smith",
+#       "specialty": "General Practice"
+#     },
+#     "branch": {
+#       "name": "Main Branch - Downtown",
+#       "address": "123 Healthcare Ave"
+#     }
+#   }
+# ]
+```
+
+#### Cancel/Reschedule Appointment
+```bash
+# Cancel appointment
+curl -X PATCH http://localhost:3000/api/patientflow/appointments/apt_456 \
+  -H "Content-Type: application/json" \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -d '{
+    "status": "CANCELLED"
+  }'
+
+# Reschedule appointment
+curl -X PATCH http://localhost:3000/api/patientflow/appointments/apt_456 \
+  -H "Content-Type: application/json" \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -d '{
+    "startTime": "2024-01-22T10:00:00Z",
+    "endTime": "2024-01-22T10:30:00Z"
+  }'
+```
+
+#### Get Call Logs
+```bash
+curl http://localhost:3000/api/patientflow/call-logs \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -G \
+  --data-urlencode "patientPhone=+15555551234" \
+  --data-urlencode "limit=10"
+
+# Expected response:
+# [
+#   {
+#     "id": "call_789",
+#     "callSid": "CAxxxxxxxxxxxxxxxx",
+#     "status": "COMPLETED",
+#     "startTime": "2024-01-15T14:30:00Z",
+#     "durationSeconds": 120,
+#     "transcription": "Patient called to book appointment..."
+#   }
+# ]
+```
+
+#### Get WhatsApp Message Logs
+```bash
+curl http://localhost:3000/api/patientflow/message-logs \
+  -H "X-Organization-ID: org_demo_clinic" \
+  -G \
+  --data-urlencode "patientPhone=+15555551234" \
+  --data-urlencode "channel=WHATSAPP" \
+  --data-urlencode "limit=10"
+
+# Expected response:
+# [
+#   {
+#     "id": "msg_101",
+#     "channel": "WHATSAPP",
+#     "direction": "INBOUND",
+#     "payload": {
+#       "from": "whatsapp:+15555551234",
+#       "body": "Hi, I need to book an appointment"
+#     },
+#     "createdAt": "2024-01-15T14:30:00Z"
+#   }
+# ]
+```
+
+### Documentation
+
+For detailed setup, demo scenarios, and operational procedures, see:
+
+- 📖 **[Deployment Guide](./docs/patientflow/deployment.md)** - Railway setup, environment configuration, Twilio/Google Cloud integration
+- 🎬 **[Demo Scenarios](./docs/patientflow/demo-scenarios.md)** - Scripted walkthroughs for voice and WhatsApp demos
+- 🛟 **[Operations Runbook](./docs/patientflow/runbook.md)** - Monitoring, troubleshooting, and maintenance procedures
+
+### Demo Validation Checklist
+
+Before running a demo:
+
+- [ ] ✅ Railway deployment is healthy (`/health` returns 200)
+- [ ] ✅ Database migrations are complete (`npx prisma migrate status`)
+- [ ] ✅ Demo data is seeded (doctors, schedules, clinic branches)
+- [ ] ✅ Twilio phone number is active and webhooks configured
+- [ ] ✅ WhatsApp sandbox connected (or production number approved)
+- [ ] ✅ Google Cloud TTS credentials valid (`gcloud auth list`)
+- [ ] ✅ OpenAI API key has sufficient credits
+- [ ] ✅ Test appointment booking via API works
+- [ ] ✅ Test voice call triggers webhook correctly
+- [ ] ✅ Test WhatsApp message triggers webhook correctly
+
+### Cost Estimates
+
+**Development Environment:**
+- Railway Hobby: ~$5/month
+- Twilio Phone Number: ~$1-2/month
+- Twilio Usage: $0.0085/min for calls, $0.0075/SMS
+- Google Cloud TTS: ~$4 per 1M characters (pay-as-you-go)
+- OpenAI GPT-4: ~$0.03 per 1K tokens (pay-as-you-go)
+
+**Production Environment:**
+- Railway Pro: ~$20/month + databases
+- Estimated usage: $50-100/month for 500 appointments/month
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                   PatientFlow System                     │
+├─────────────────────────────────────────────────────────┤
+│                                                          │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐         │
+│  │  Twilio  │───▶│  Fastify │───▶│PostgreSQL│         │
+│  │ Voice +  │    │   API    │    │ Database │         │
+│  │ WhatsApp │◀───│  Server  │◀───│  Prisma  │         │
+│  └──────────┘    └──────────┘    └──────────┘         │
+│       │               │                                  │
+│       │          ┌────┴────┐                           │
+│       │          │         │                           │
+│  ┌────▼───┐  ┌──▼──┐  ┌──▼────┐                      │
+│  │ Google │  │Redis│  │OpenAI │                      │
+│  │  TTS   │  │Cache│  │  AI   │                      │
+│  └────────┘  └─────┘  └───────┘                      │
+│                                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Support
+
+For PatientFlow issues:
+- 📧 Email: patientflow-support@orchestrall.com
+- 💬 Slack: #patientflow-support
+- 📖 Docs: [docs/patientflow/](./docs/patientflow/)
+
+---
+
 ## 📚 API Documentation
 
 ### Authentication
