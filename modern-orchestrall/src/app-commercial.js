@@ -159,6 +159,30 @@ async function registerPlugins() {
     threshold: 1024,
     encodings: ['gzip', 'deflate'],
   });
+
+  // Add authentication decorator
+  app.decorate('authenticate', async (request, reply) => {
+    try {
+      const token = request.headers.authorization?.replace('Bearer ', '');
+      
+      if (!token) {
+        reply.code(401).send({ error: 'Authentication required' });
+        return;
+      }
+
+      const decoded = app.jwt.verify(token);
+      
+      // Add user context
+      request.user = decoded;
+      request.userId = decoded.id;
+      request.organizationId = decoded.organizationId;
+
+      return true;
+    } catch (error) {
+      reply.code(401).send({ error: 'Invalid token' });
+      return false;
+    }
+  });
 }
 
 // Enhanced request logging with monitoring
@@ -1388,6 +1412,10 @@ app.get('/api/plugins/health', async (request, reply) => {
 // Universal CRUD API Routes
 const universalCRUDRoutes = require('./routes/universal-crud');
 app.register(universalCRUDRoutes, { prisma: database.client });
+
+// PatientFlow Dashboard Routes
+const patientflowRoutes = require('./routes/patientflow-routes');
+app.register(patientflowRoutes);
 
 // Autonomous Platform Manager
 let autonomousPlatformManager = null;

@@ -9,11 +9,48 @@ This is the **next-generation Orchestrall platform** implementing a modern hybri
 - **Agentic AI Frameworks**: LangGraph, CrewAI, AutoGen integration
 - **Feature Flag System**: Runtime configuration per client
 - **Plugin Architecture**: 200+ pre-built integrations
+- **PatientFlow Dashboard**: Real-time clinic operations monitoring
+
+## 🚀 PatientFlow Dashboard
+
+**NEW**: A comprehensive Next.js dashboard for monitoring PatientFlow operations:
+
+- **Real-time Monitoring**: Live WhatsApp conversations, call sessions, and appointments
+- **Key Metrics**: Messages, calls, bookings, and active conversations
+- **Auto-refresh**: Data updates every 10 seconds
+- **Demo Mode**: One-click access without authentication setup
+- **Responsive Design**: Works on desktop, tablet, and mobile
+
+### Quick Start Dashboard
+```bash
+# 1. Seed demo data
+npm run db:seed:patientflow
+
+# 2. Start backend
+npm run dev
+
+# 3. Start dashboard (new terminal)
+npm run dashboard:dev
+
+# 4. Visit http://localhost:3001
+# Click "Enter Dashboard Demo" for instant access
+```
+
+**Documentation**: See `docs/patientflow/deployment.md` for detailed setup instructions.
 
 ## 📁 Project Structure
 
 ```
 modern-orchestrall/
+├── apps/
+│   └── patientflow-dashboard/  # Next.js dashboard for PatientFlow
+│       ├── src/
+│       │   ├── app/           # Next.js App Router pages
+│       │   ├── components/     # React components
+│       │   ├── contexts/      # React contexts
+│       │   └── lib/           # API client and utilities
+│       ├── package.json
+│       └── README.md
 ├── packages/
 │   ├── shared/              # Shared utilities and types
 │   │   ├── src/

@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "Modern Orchestrall Platform with Multi-tenant Support",
   "main": "src/app-commercial.js",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "start": "node src/app-commercial.js",
     "start:production": "NODE_ENV=production node src/app-zero-config.js",
@@ -28,9 +31,12 @@
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
     "db:seed": "node src/seed.js",
+    "db:seed:patientflow": "node src/seed-patientflow.js",
     "db:reset": "npx prisma migrate reset",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "dashboard:dev": "npm run dev --workspace=patientflow-dashboard",
+    "dashboard:build": "npm run build --workspace=patientflow-dashboard",
     "deploy:integration": "bash deployment/deploy.sh integration",
     "deploy:staging": "bash deployment/deploy.sh staging",
     "deploy:production": "bash deployment/deploy.sh production",
@@ -46,7 +52,9 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
     "testMatch": [
       "**/tests/**/*.test.js",
       "**/tests/**/*.spec.js"
@@ -58,7 +66,11 @@
       "!src/seed.js"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html"],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
     "coverageThreshold": {
       "global": {
         "branches": 80,
@@ -71,6 +83,7 @@
     "verbose": true
   },
   "dependencies": {
+    "@faker-js/faker": "^10.1.0",
     "@fastify/cors": "^8.4.0",
     "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^7.2.4",
@@ -79,14 +92,13 @@
     "@fastify/static": "^6.12.0",
     "@fastify/swagger": "^8.12.0",
     "@fastify/swagger-ui": "^2.0.0",
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^6.19.0",
     "axios": "^1.6.2",
     "bcrypt": "^5.1.1",
     "dotenv": "^16.3.1",
     "fastify": "^4.24.3",
     "js-yaml": "^4.1.0",
     "openai": "^4.20.1",
-    "prisma": "^5.22.0",
     "redis": "^4.6.10",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
@@ -96,6 +108,7 @@
     "@types/supertest": "^2.0.16",
     "jest": "^29.7.0",
     "nodemon": "^3.0.1",
+    "prisma": "^6.19.0",
     "supertest": "^6.3.3"
   }
 }
