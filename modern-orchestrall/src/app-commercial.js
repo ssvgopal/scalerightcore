@@ -1389,6 +1389,10 @@ app.get('/api/plugins/health', async (request, reply) => {
 const universalCRUDRoutes = require('./routes/universal-crud');
 app.register(universalCRUDRoutes, { prisma: database.client });
 
+// PatientFlow Routes
+const patientFlowRoutes = require('./patientflow/routes');
+app.register(patientFlowRoutes, { prisma: database.client, redis: cacheService.redis });
+
 // Autonomous Platform Manager
 let autonomousPlatformManager = null;
 let pluginEngine = null;
