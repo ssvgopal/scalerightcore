@@ -27,7 +27,7 @@
     "test:all": "npm run test:unit && npm run test:integration && npm run test:api && npm run test:security",
     "db:migrate": "npx prisma migrate dev",
     "db:generate": "npx prisma generate",
-    "db:seed": "node src/seed.js",
+    "db:seed": "npx prisma db seed",
     "db:reset": "npx prisma migrate reset",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
@@ -103,5 +103,8 @@
     "nodemon": "^3.0.1",
     "prisma": "^6.19.0",
     "supertest": "^6.3.3"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }
