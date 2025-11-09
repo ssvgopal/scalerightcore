@@ -8,6 +8,13 @@ const agentSystem = require('./agents');
 const cacheService = require('./cache');
 const monitoringService = require('./monitoring');
 const securityService = require('./security');
+const patientFlowService = require('./patientflow');
+const { 
+  handleWhatsAppWebhook, 
+  handleTwilioVoiceWebhook, 
+  handleAppointmentWebhook,
+  simulatePatientFlowInteractions 
+} = require('./patientflow/webhooks');
 
 // Create Fastify instance with enhanced configuration
 const app = fastify({
@@ -500,12 +507,115 @@ app.get('/test', async (request, reply) => {
 });
 
 app.get('/api/health', async (request, reply) => {
-  return {
+  const baseHealth = {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     version: config.deployment.version,
   };
+
+  try {
+    // Include PatientFlow health checks
+    const patientFlowHealth = await monitoringService.getPatientFlowHealth();
+    baseHealth.patientflow = patientFlowHealth;
+
+    // Update overall status if PatientFlow is degraded or unhealthy
+    if (patientFlowHealth.status === 'unhealthy') {
+      baseHealth.status = 'unhealthy';
+    } else if (patientFlowHealth.status === 'degraded') {
+      baseHealth.status = 'degraded';
+    }
+
+  } catch (error) {
+    logger.error('Health check failed', error);
+    baseHealth.status = 'unhealthy';
+    baseHealth.error = error.message;
+  }
+
+  return baseHealth;
+});
+
+// PatientFlow webhook endpoints
+app.post('/webhooks/patientflow/whatsapp', {
+  schema: {
+    description: 'WhatsApp webhook for PatientFlow',
+    tags: ['patientflow', 'webhooks'],
+    body: {
+      type: 'object',
+      properties: {
+        Body: { type: 'string' },
+        From: { type: 'string' },
+        To: { type: 'string' },
+        MessageSid: { type: 'string' },
+      },
+      required: ['Body', 'From', 'To', 'MessageSid'],
+    },
+  },
+}, handleWhatsAppWebhook);
+
+app.post('/webhooks/patientflow/voice', {
+  schema: {
+    description: 'Twilio voice webhook for PatientFlow',
+    tags: ['patientflow', 'webhooks'],
+    body: {
+      type: 'object',
+      properties: {
+        CallSid: { type: 'string' },
+        CallStatus: { type: 'string' },
+        From: { type: 'string' },
+        To: { type: 'string' },
+        Duration: { type: 'string' },
+      },
+      required: ['CallSid', 'CallStatus', 'From', 'To'],
+    },
+  },
+}, handleTwilioVoiceWebhook);
+
+app.post('/webhooks/patientflow/appointment', {
+  schema: {
+    description: 'Appointment booking webhook for PatientFlow',
+    tags: ['patientflow', 'webhooks'],
+    body: {
+      type: 'object',
+      properties: {
+        source: { type: 'string', enum: ['WHATSAPP', 'VOICE', 'MANUAL'] },
+        patientId: { type: 'string' },
+        doctorId: { type: 'string' },
+        startTime: { type: 'string', format: 'date-time' },
+        endTime: { type: 'string', format: 'date-time' },
+        reason: { type: 'string' },
+      },
+      required: ['patientId', 'doctorId', 'startTime', 'endTime'],
+    },
+  },
+}, handleAppointmentWebhook);
+
+// Test endpoint for simulating PatientFlow interactions
+app.get('/test/patientflow/simulate', {
+  schema: {
+    description: 'Simulate PatientFlow interactions for testing metrics',
+    tags: ['patientflow', 'test'],
+    querystring: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['message', 'call', 'booking'], default: 'message' },
+        count: { type: 'integer', minimum: 1, maximum: 10, default: 1 },
+      },
+    },
+  },
+}, simulatePatientFlowInteractions);
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (request, reply) => {
+  try {
+    const metrics = await monitoringService.getMetrics();
+    reply.type('text/plain; version=0.0.4; charset=utf-8');
+    return metrics;
+  } catch (error) {
+    logger.error('Failed to get metrics', error);
+    reply.code(500);
+    return { error: 'Failed to retrieve metrics' };
+  }
 });
 
 // Start server
@@ -515,6 +625,7 @@ async function start() {
     await database.connect();
     await authService.initialize();
     await agentSystem.initialize();
+    await patientFlowService.initialize();
     
     // Register plugins
     await registerPlugins();
@@ -534,7 +645,8 @@ async function start() {
     
     console.log('✅ Orchestrall Platform running on http://localhost:' + config.server.port);
     console.log('📋 Available endpoints:');
-    console.log('   GET  /health - Health check');
+    console.log('   GET  /api/health - Health check (with PatientFlow status)');
+    console.log('   GET  /metrics - Prometheus metrics');
     console.log('   GET  /docs - API documentation');
     console.log('   POST /auth/login - User login');
     console.log('   POST /auth/register - User registration');
@@ -542,6 +654,12 @@ async function start() {
     console.log('   POST /api/agents/:name/execute - Execute agent');
     console.log('   GET  /api/workflows - List workflows');
     console.log('   POST /api/workflows/:id/execute - Execute workflow');
+    console.log('');
+    console.log('🏥 PatientFlow endpoints:');
+    console.log('   POST /webhooks/patientflow/whatsapp - WhatsApp webhook');
+    console.log('   POST /webhooks/patientflow/voice - Voice call webhook');
+    console.log('   POST /webhooks/patientflow/appointment - Appointment booking webhook');
+    console.log('   GET  /test/patientflow/simulate - Simulate interactions (test metrics)');
     
   } catch (error) {
     logger.error('Failed to start server', error);
