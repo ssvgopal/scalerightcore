@@ -9,6 +9,7 @@ const agentSystem = require('./agents');
 const cacheService = require('./cache');
 const monitoringService = require('./monitoring');
 const securityService = require('./security');
+const { registerWhatsAppWebhookRoute } = require('./patientflow/whatsapp-webhook');
 
 // Create Fastify instance with enhanced configuration
 const app = fastify({
@@ -62,6 +63,9 @@ async function registerPlugins() {
       preload: true,
     },
   });
+
+  // Form body parsing for webhook integrations
+  await app.register(require('@fastify/formbody'));
 
   // Enhanced rate limiting with Redis backend
   await app.register(require('@fastify/rate-limit'), {
@@ -390,6 +394,9 @@ app.get('/metrics', {
     reply.code(500).send('Internal Server Error');
   }
 });
+
+// PatientFlow WhatsApp webhook (no authentication required)
+registerWhatsAppWebhookRoute(app);
 
 // Authentication routes with enhanced security
 app.post('/auth/login', {

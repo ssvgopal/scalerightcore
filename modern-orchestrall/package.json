@@ -17,7 +17,7 @@
     "health:check": "bash scripts/health-check.sh",
     "migrate:production": "npx prisma migrate deploy",
     "seed:production": "npx prisma db seed",
-    "test": "jest",
+    "test": "jest --config jest.config.js",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:integration": "jest --testPathPattern=integration",
@@ -78,6 +78,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.4.0",
+    "@fastify/formbody": "^8.0.2",
     "@fastify/helmet": "^11.1.1",
     "@fastify/jwt": "^7.2.4",
     "@fastify/rate-limit": "^9.1.0",
@@ -93,6 +94,7 @@
     "js-yaml": "^4.1.0",
     "openai": "^4.20.1",
     "redis": "^4.6.10",
+    "twilio": "^4.21.1",
     "winston": "^3.11.0",
     "zod": "^3.22.4"
   },
