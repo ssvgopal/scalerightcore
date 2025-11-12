@@ -1,6 +1,4 @@
 // Test setup file
-const { jest } = require('@jest/globals');
-
 // Mock environment variables
 process.env.NODE_ENV = 'test';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test_db';

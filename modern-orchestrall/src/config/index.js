@@ -81,6 +81,25 @@ const config = {
     allowedTypes: process.env.ALLOWED_FILE_TYPES ? process.env.ALLOWED_FILE_TYPES.split(',') : ['image/*', 'text/*', 'application/json'],
     uploadDir: process.env.UPLOAD_DIR || './uploads',
   },
+
+  // PatientFlow domain configuration
+  patientflow: {
+    defaultOrganizationId: process.env.PATIENTFLOW_ORGANIZATION_ID || '',
+    session: {
+      ttlSeconds: parseInt(process.env.PATIENTFLOW_SESSION_TTL || '900', 10),
+    },
+    messaging: {
+      dedupeTtlSeconds: parseInt(process.env.PATIENTFLOW_DEDUPE_TTL || '86400', 10),
+      retryWindowSeconds: parseInt(process.env.PATIENTFLOW_RETRY_WINDOW || '900', 10),
+    },
+    twilio: {
+      accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+      authToken: process.env.TWILIO_AUTH_TOKEN || '',
+      whatsappFromNumber: process.env.TWILIO_WHATSAPP_FROM_NUMBER || '',
+      enableSignatureValidation: process.env.TWILIO_VALIDATE_SIGNATURE !== 'false',
+      statusCallbackUrl: process.env.TWILIO_STATUS_CALLBACK_URL || '',
+    },
+  },
 };
 
 // Validation
