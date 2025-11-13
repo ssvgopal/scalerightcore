@@ -1,5 +1,4 @@
 // Test setup file
-const { jest } = require('@jest/globals');
 
 // Mock environment variables
 process.env.NODE_ENV = 'test';
@@ -10,6 +9,13 @@ process.env.OPENWEATHER_API_KEY = 'test-openweather-key';
 process.env.GOOGLE_MAPS_API_KEY = 'test-google-maps-key';
 process.env.NCDEX_API_KEY = 'test-ncdex-key';
 process.env.AGMARKNET_API_KEY = 'test-agmarknet-key';
+process.env.TWILIO_ACCOUNT_SID = 'test-twilio-account-sid';
+process.env.TWILIO_AUTH_TOKEN = 'test-twilio-auth-token';
+process.env.TWILIO_PHONE_NUMBER = '+1-555-0000';
+process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = 'test-whatsapp-biz-id';
+process.env.WHATSAPP_API_KEY = 'test-whatsapp-api-key';
+process.env.LLM_SERVICE_URL = 'http://localhost:3000';
+process.env.LLM_API_KEY = 'test-llm-api-key';
 
 // Global test timeout
 jest.setTimeout(30000);
