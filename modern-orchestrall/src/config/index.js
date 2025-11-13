@@ -81,6 +81,34 @@ const config = {
     allowedTypes: process.env.ALLOWED_FILE_TYPES ? process.env.ALLOWED_FILE_TYPES.split(',') : ['image/*', 'text/*', 'application/json'],
     uploadDir: process.env.UPLOAD_DIR || './uploads',
   },
+
+  // PatientFlow Configuration
+  patientflow: {
+    aiProvider: process.env.PATIENTFLOW_AI_PROVIDER || 'openai',
+    openaiWhisperModel: process.env.OPENAI_WHISPER_MODEL || 'whisper-1',
+    claudeApiKey: process.env.CLAUDE_API_KEY || '',
+    
+    // Twilio Configuration
+    twilio: {
+      accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+      authToken: process.env.TWILIO_AUTH_TOKEN || '',
+      whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER || '',
+      voiceNumber: process.env.TWILIO_VOICE_NUMBER || '',
+      webhookSecret: process.env.TWILIO_WEBHOOK_SECRET || '',
+    },
+    
+    // Google Text-to-Speech Configuration
+    googleTts: {
+      projectId: process.env.GOOGLE_TTS_PROJECT_ID || '',
+      clientEmail: process.env.GOOGLE_TTS_CLIENT_EMAIL || '',
+      privateKey: process.env.GOOGLE_TTS_PRIVATE_KEY ? process.env.GOOGLE_TTS_PRIVATE_KEY.replace(/\\n/g, '\n') : '',
+      credentialsJson: process.env.GOOGLE_TTS_CREDENTIALS_JSON || '',
+    },
+    
+    // Session and Demo Configuration
+    sessionTtl: parseInt(process.env.PATIENTFLOW_SESSION_TTL || '3600'),
+    demoPhoneAllowlist: process.env.DEMO_PHONE_ALLOWLIST ? process.env.DEMO_PHONE_ALLOWLIST.split(',').map(p => p.trim()) : [],
+  },
 };
 
 // Validation
@@ -99,6 +127,31 @@ if (missingEnvVars.length > 0) {
   if (config.server.nodeEnv === 'production') {
     console.error('❌ Cannot start in production without required environment variables');
     process.exit(1);
+  }
+}
+
+// PatientFlow Configuration Validation (Production Warnings)
+if (config.server.nodeEnv === 'production') {
+  const patientflowWarnings = [];
+  
+  if (!config.patientflow.aiProvider || !process.env.PATIENTFLOW_AI_PROVIDER) {
+    patientflowWarnings.push('PATIENTFLOW_AI_PROVIDER');
+  }
+  
+  if (config.patientflow.aiProvider === 'claude' && !config.patientflow.claudeApiKey) {
+    patientflowWarnings.push('CLAUDE_API_KEY (required when PATIENTFLOW_AI_PROVIDER=claude)');
+  }
+  
+  if (!config.patientflow.twilio.accountSid || !config.patientflow.twilio.authToken) {
+    patientflowWarnings.push('TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN');
+  }
+  
+  if (!config.patientflow.googleTts.projectId && !config.patientflow.googleTts.credentialsJson) {
+    patientflowWarnings.push('GOOGLE_TTS_PROJECT_ID or GOOGLE_TTS_CREDENTIALS_JSON');
+  }
+  
+  if (patientflowWarnings.length > 0) {
+    console.warn(`⚠️  Missing PatientFlow configuration: ${patientflowWarnings.join(', ')}`);
   }
 }
 

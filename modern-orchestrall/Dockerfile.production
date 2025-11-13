@@ -2,7 +2,7 @@ FROM node:18-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat sox ffmpeg
 WORKDIR /app
 
 # Install dependencies based on the preferred package manager
@@ -35,6 +35,13 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
 
+# Copy bootstrap script
+COPY --chmod=755 docker/bootstrap.sh /app/docker/bootstrap.sh
+
+# Create necessary directories and credentials directory
+RUN mkdir -p /app/logs /app/uploads /app/backups /tmp/gcp-credentials && \
+    chown -R orchestrall:nodejs /app/logs /app/uploads /app/backups /tmp/gcp-credentials
+
 USER orchestrall
 
 EXPOSE 3000
@@ -42,4 +49,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Start the application with bootstrap script
+ENTRYPOINT ["/app/docker/bootstrap.sh"]
 CMD ["node", "src/app-zero-config.js"]

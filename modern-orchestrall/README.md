@@ -167,6 +167,33 @@ UNLEASH_URL=http://unleash:4242/api
 UNLEASH_API_TOKEN=your-token
 ```
 
+### PatientFlow Configuration
+
+PatientFlow provides AI-powered voice and messaging capabilities. See `deployment/patientflow-env-config.md` for detailed setup:
+
+```bash
+# AI Provider
+PATIENTFLOW_AI_PROVIDER=openai
+OPENAI_WHISPER_MODEL=whisper-1
+CLAUDE_API_KEY=sk-ant-...
+
+# Twilio (WhatsApp, Voice, SMS)
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_WHATSAPP_NUMBER=+1234567890
+TWILIO_VOICE_NUMBER=+1234567890
+TWILIO_WEBHOOK_SECRET=...
+
+# Google Cloud Text-to-Speech
+GOOGLE_TTS_PROJECT_ID=my-project
+GOOGLE_TTS_CLIENT_EMAIL=...@iam.gserviceaccount.com
+GOOGLE_TTS_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----...
+
+# Session Management
+PATIENTFLOW_SESSION_TTL=3600
+DEMO_PHONE_ALLOWLIST=+1234567890
+```
+
 ## 🤖 Agent Frameworks
 
 ### LangGraph Workflows
