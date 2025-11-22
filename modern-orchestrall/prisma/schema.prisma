@@ -73,7 +73,8 @@ model Organization {
   analyticsConfigs AnalyticsConfig[]
   grafanaDashboards GrafanaDashboard[]
   alertRules AlertRule[]
-  notificationChannels NotificationChannel[]
+  notificationChannelConfigs NotificationChannelConfig[]
+  assets Asset[]
 
   @@map("organizations")
 }
@@ -1573,34 +1574,13 @@ model AlertRule {
   organizationId String?
   organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   enabled       Boolean  @default(true)
-  alerts        Alert[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
   @@map("alert_rules")
 }
 
-model Alert {
-  id              String   @id @default(cuid())
-  ruleId          String
-  rule            AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  name            String
-  description     String
-  severity        String
-  status          String   // active, acknowledged, resolved
-  triggeredAt     DateTime
-  acknowledgedAt  DateTime?
-  acknowledgedBy  String?
-  resolvedAt      DateTime?
-  resolvedBy      String?
-  metadata        Json     @default("{}")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
-  @@map("alerts")
-}
-
-model NotificationChannel {
+model NotificationChannelConfig {
   id            String   @id @default(cuid())
   name          String   @unique
   type          String   // email, slack, sms, webhook
@@ -1611,7 +1591,7 @@ model NotificationChannel {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
-  @@map("notification_channels")
+  @@map("notification_channel_configs")
 }
 
 model BusinessMetric {
@@ -1623,4 +1603,18 @@ model BusinessMetric {
   createdAt     DateTime @default(now())
   
   @@map("business_metrics")
+}
+
+model Asset {
+  id            String   @id @default(cuid())
+  kind          String   // 'saree', 'product', etc.
+  status        String   @default("ingested") // 'ingested', 'processing', 'completed', 'failed'
+  urls          Json     @default("{}") // { source: string, tryon: string[], video: string, depth: string, normals: string }
+  meta          Json     @default("{}") // { provider: string, jobId: string, avatarSpec: {}, etc. }
+  organizationId String?
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("assets")
 }

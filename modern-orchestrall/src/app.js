@@ -1,5 +1,6 @@
 // src/app.js - Complete Orchestrall Platform Implementation with Commercial Features
 const fastify = require('fastify');
+const path = require('path');
 const config = require('./config');
 const logger = require('./utils/logger');
 const database = require('./database');
@@ -76,6 +77,8 @@ async function registerPlugins() {
         { name: 'organizations', description: 'Organization management' },
         { name: 'users', description: 'User management' },
         { name: 'health', description: 'Health checks' },
+        { name: 'Demo', description: 'Demo endpoints' },
+        { name: 'Saree', description: 'Saree demo endpoints' },
       ],
     },
   });
@@ -86,6 +89,13 @@ async function registerPlugins() {
       docExpansion: 'full',
       deepLinking: false,
     },
+  });
+
+  // Static file serving for uploads
+  await app.register(require('@fastify/static'), {
+    root: path.join(process.cwd(), config.storage.path || './uploads'),
+    prefix: '/uploads/',
+    decorateReply: false,
   });
 }
 
@@ -507,6 +517,10 @@ app.get('/api/health', async (request, reply) => {
     version: config.deployment.version,
   };
 });
+
+// Register demo saree routes
+const demoSareeRoutes = require('./routes/demo-saree-routes');
+app.register(demoSareeRoutes, { prisma: database.client });
 
 // Start server
 async function start() {
